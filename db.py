@@ -1,9 +1,7 @@
 import sqlite3
 from aiogram import types
 import os
-from log import create_logger
-
-logger = create_logger(__name__)
+from log import logging
 
 
 
@@ -19,6 +17,7 @@ class DB:
         self.cursor = self.conn.cursor()
         self.run()
         self.users_table = "users"
+        self.logger = logging.getLogger("DataBase")
         
        
     def run(self):
@@ -28,34 +27,31 @@ class DB:
         # Создание основной таблицы с пользователями
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                id             INTEGER PRIMARY KEY,
-                user_id        INTEGER NOT NULL,
-                tg_username    TEXT,
-                group_id       INTEGER NOT NULL,
-                sec_group_id   INTEGER,
-                rasp_data      TEXT,
-                mng_time       TEXT,
-                mng_send_state TEXT,
-                call_data      TEXT,
+                id                          INTEGER PRIMARY KEY,
+                user_id                     INTEGER NOT NULL,
+                tg_username                 TEXT,
+                group_id                    INTEGER NOT NULL,
+                sec_group_id                INTEGER,
+                missed_hours                INTEGER,
+                show_missed_hours_mode      TEXT,
                 UNIQUE (user_id,tg_username) 
             )
         ''')
         self.conn.commit()
     
-    def insert(self, user_id: int, tg_username: str, tg_firstname: str):
+    def insert(self, user_id: int, tg_username: str, group_id: int, sec_group_id: int):
         """
         Вставка пользователя в основную БД после подтверждения
         """
-        is_user = DB.get(user_id=user_id, data="user_id", table=DB.users_table)
-        if is_user is None:
+        if self.is_exists(user_id) is False:
             self.cursor.execute(
-                'INSERT INTO users (user_id, tg_username, tg_firstname, username, balance, cash_circulation, percentage, percentage_edit_type, _is_banned, all_time_balance) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (user_id, tg_username, tg_firstname, tg_firstname, 0, 0, 50, "auto", "False", 0))
+                'INSERT INTO users (user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode)'
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                (user_id, tg_username, group_id, sec_group_id, 0, None))
             self.conn.commit()
-        else:
-            pass
 
+    def is_exists(self, user_id: int):
+        return False if self.get(user_id=user_id, data="user_id", table=DB.users_table) is None else True
 
     def get(self, user_id: int, data: str, table: str):
         """
@@ -84,7 +80,6 @@ class DB:
         else:
             return None
         
-    
     def get_all_user_id(self, user_id: int, data: str, table: str):
         """
         Получение всех данных из БД по user_id и data 
@@ -98,6 +93,17 @@ class DB:
             result.append(item)
         return result
     
+    def get_all_usersWgroup(self) -> dict:
+        _dict = {}
+        from config import groups
+        for group in groups:
+            self.cursor.execute("SELECT user_id FROM users WHERE group_id = ?", (group,))
+            user_ids = [user_id[0] for user_id in self.cursor.fetchall()]
+            _dict[group] = user_ids
+        return _dict
+
+
+
     def get_all(self, data: str, table: str):
         """
         Получение всех данных из БД по data
@@ -109,6 +115,14 @@ class DB:
             item = item[0]
             result.append(item)
         return result
+
+    def get_user_groups(self, user_id: int):
+        self.cursor.execute(f"SELECT group_id, sec_group_id FROM {self.users_table} WHERE user_id = ?", (user_id,))
+        result = self.cursor.fetchone()
+        if result is not None:
+            return result[0], result[1]
+        else:
+            return None, None       
 
     def delete(self, user_id: int, table: str):
         """

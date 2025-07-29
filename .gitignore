@@ -4,3 +4,7 @@ data/
 db/
 *.pyc
 __pycache__/
+.venv/
+.vscode/
+database/
+*.db

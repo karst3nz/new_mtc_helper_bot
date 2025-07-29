@@ -6,4 +6,7 @@ class States(StatesGroup):
     """
     Класс для FSM
     """
-    _input = State()
+    first_reg_group = State()
+    sec_reg_group = State()
+    change_main_group = State()
+    change_sec_group = State()
