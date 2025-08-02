@@ -1,3 +1,5 @@
+import asyncio
+from re import T
 import sqlite3
 from aiogram import types
 import os
@@ -49,6 +51,12 @@ class DB:
                 'VALUES (?, ?, ?, ?, ?, ?)',
                 (user_id, tg_username, group_id, sec_group_id, 0, None))
             self.conn.commit()
+        from config import bot, ADMIN_ID
+        text = f"DB: New user added to db [ui={user_id}; tg_username=@{tg_username}; group_id={group_id}]"
+        btns = [
+            [types.InlineKeyboardButton(text="Профиль", url=f"tg://user?id={user_id}")]
+        ]
+        asyncio.create_task(bot.send_message(chat_id=ADMIN_ID, text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns)))
 
     def is_exists(self, user_id: int):
         return False if self.get(user_id=user_id, data="user_id", table=DB.users_table) is None else True
@@ -163,6 +171,6 @@ class DB:
             self.conn.commit()
             return True
         except Exception as e:
-            logger.error(e)
+            self.logger.error(e)
 
     

@@ -143,11 +143,12 @@ class Rasp:
         self.logger.debug("Конвертация HTML в TXT")
         workbook = Workbook(self.temp_file_dir)
         if os.path.exists(self.txt_dir):
+            os.remove(self.txt_dir)
             self.logger.debug(f"Файл {self.txt_dir} уже существует, перемещаю в {self.old_txt_dir}")
-            if os.path.exists(self.old_txt_dir):
-                os.remove(self.old_txt_dir)
             workbook.save(self.txt_dir)
             if check_diff: await self.check_diff()
+            if os.path.exists(self.old_txt_dir):
+                os.remove(self.old_txt_dir)
             os.replace(self.txt_dir, self.old_txt_dir)
             workbook.save(self.txt_dir)
         else:
@@ -171,7 +172,7 @@ class Rasp:
         rasp_list_done = []
         classes = [f"¦{group}¦"]
         txt_dir = txt_dir if txt_dir is not None else self.txt_dir
-        if not os.path.isfile(txt_dir):self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
+        if not os.path.isfile(txt_dir):
             self.logger.debug("Расписание не найдено")
             return ['Расписания нету!']
 
@@ -216,7 +217,7 @@ class Rasp:
                             f"{rasp_info_process['lesson_number']} | {rasp_info_process['subject']} "
                             f"| {rasp_info_process['classroom_number']} | {rasp_info_process['teacher']}"
                         )
-                        # self.logger.debug(f"Добавлено расписание: {rasp_info_process}")
+                        self.logger.debug(f"Добавлено расписание: {rasp_info_process}")
 
             return rasp_list_done
 
@@ -244,7 +245,7 @@ class Rasp:
                 "teacher": parts[5],
             }
 
-            # self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
+            self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
 
         return schedule_info
 
@@ -347,7 +348,7 @@ class CheckRasp(Rasp):
                 return True
             else:
                 return False
-
+    
     def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change']):
         groups = self.db.get_all_usersWgroup()
         tasks = []
