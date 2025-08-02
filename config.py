@@ -41,6 +41,7 @@ groups = [
         '4596', '4311', '4312', '4111'
     ]
 
+
 # Проверка на правильность токена бота
 try:
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(
