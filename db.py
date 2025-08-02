@@ -102,7 +102,12 @@ class DB:
             _dict[group] = user_ids
         return _dict
 
-
+    def get_all_usersBYgroup(self, group) -> dict:
+        _dict = {}
+        self.cursor.execute("SELECT user_id FROM users WHERE group_id = ?", (group,))
+        user_ids = [user_id[0] for user_id in self.cursor.fetchall()]
+        _dict[group] = user_ids
+        return _dict        
 
     def get_all(self, data: str, table: str):
         """

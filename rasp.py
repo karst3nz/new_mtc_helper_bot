@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta
 import os
+from pickle import TRUE
+from tabnanny import check
 import tempfile
 import time
+from typing import Literal
 import aiohttp
 from aspose.cells import Workbook
 from db import DB
@@ -22,11 +25,15 @@ class Rasp:
             self.txt_filename = f"{self.date}.txt"
             self.base_txt_dir = "data/txt"
             self.txt_dir = os.path.join(self.base_txt_dir, self.txt_filename)
+            self.old_base_txt_dir = "data/old_txt"
+            self.old_txt_dir = os.path.join(self.old_base_txt_dir, self.txt_filename)
         else:
             self.filename = f"SETKA%20{self.dateWyear}.htm"
             self.txt_filename = f"{self.date}.txt"
             self.base_txt_dir = "data/teach_txt"
             self.txt_dir = os.path.join(self.base_txt_dir, self.txt_filename)
+            self.old_base_txt_dir = "data/old_teach_txt"
+            self.old_txt_dir = os.path.join(self.old_base_txt_dir, self.txt_filename)
 
         self.url = f"https://bseumtc.by/schedule/public/rasp/{self.filename}"            
         self.headers = {
@@ -73,16 +80,81 @@ class Rasp:
                 await self.close_session()
                 return r
 
-    def convert_htm2txt(self):
+
+    @staticmethod
+    def compare_texts(t1, t2):
+        import difflib
+        t1_lines = [line for line in t1.strip().splitlines()]
+        t2_lines = [line for line in t2.strip().splitlines()]
+        diff = list(difflib.ndiff(t1_lines, t2_lines))
+        result = []
+        i = 0
+        changes_found = False  # Флаг для отслеживания изменений
+        while i < len(diff):
+            line = diff[i]
+            if line.startswith("  "):
+                # Одинаковые строки
+                result.append(line[2:])
+                i += 1
+            elif line.startswith("- "):
+                # Удалено
+                changes_found = True
+                if i + 1 < len(diff) and diff[i + 1].startswith("+ "):
+                    # Замена строки
+                    result.append(f"<s>{line[2:]}</s>")
+                    result.append(f"<b><i>{diff[i + 1][2:]}</i></b>")
+                    i += 2
+                else:
+                    result.append(f"<s>{line[2:]}</s>")
+                    i += 1
+            elif line.startswith("+ "):
+                # Добавлено (если не после удаления — иначе уже обработано как замена)
+                changes_found = True
+                result.append(f"<b><i>{line[2:]}</i></b>")
+                i += 1
+            else:
+                i += 1
+        return "\n".join(result), changes_found
+
+
+    async def check_diff(self):
+        from config import groups
+        self.logger.debug("Проверка изменений в расписании")
+        checkrasp = CheckRasp(self.date, self.is_teacher)
+        db = DB()
+        for group in groups:
+            old_text = await self.get_rasp(group=group, txt_dir=self.old_txt_dir)
+            new_text = await self.get_rasp(group=group, txt_dir=self.txt_dir)
+            diff, status = self.compare_texts(old_text, new_text)
+            if status is True:
+                self.logger.info(f"[DEBUG] DIFF {group} {status} [DEBUG]\n{diff}")
+                self.logger.debug(f"Обнаружено изменение в расписании для группы {group}")
+                groups = db.get_all_usersBYgroup(group)
+                self.logger.debug(diff)
+                if "<s>Расписания нету!</s>" in diff: 
+                    tasks = checkrasp._create_tasks(mode="new-rasp")
+                    await asyncio.gather(*tasks)
+                else: 
+                    tasks = checkrasp._create_tasks_change(mode="rasp-change", groups=groups, rasp_text=diff)
+                    await asyncio.gather(*tasks)
+                
+
+    async def convert_htm2txt(self, check_diff: bool = True):
         self.logger.debug("Конвертация HTML в TXT")
         workbook = Workbook(self.temp_file_dir)
         if os.path.exists(self.txt_dir):
-            self.logger.debug(f"Файл {self.txt_dir} уже существует, удаление")
-            os.remove(self.txt_dir)
-        workbook.save(self.txt_dir)
+            self.logger.debug(f"Файл {self.txt_dir} уже существует, перемещаю в {self.old_txt_dir}")
+            if os.path.exists(self.old_txt_dir):
+                os.remove(self.old_txt_dir)
+            workbook.save(self.txt_dir)
+            if check_diff: await self.check_diff()
+            os.replace(self.txt_dir, self.old_txt_dir)
+            workbook.save(self.txt_dir)
+        else:
+            workbook.save(self.txt_dir)
         self.logger.debug(f"Файл сохранен как {self.txt_dir}")
 
-    async def get(self):
+    async def get(self, check_diff: bool = True):
         self.logger.debug("Получение данных")
         self.rasp_response = await self._make_request()
         if self.rasp_response is None:
@@ -92,28 +164,30 @@ class Rasp:
             self.logger.debug(f"Запись данных во временный файл {self.temp_file_dir}")
             temp_file.write(self.rasp_response)
         self.logger.debug("Данные успешно записаны во временный файл")
-        self.convert_htm2txt()
+        await self.convert_htm2txt(check_diff)
 
-    def group_rasp_parse(self, group):
+    def rasp_parse(self, group, txt_dir: str = None): 
         rasp_list = []
         rasp_list_done = []
         classes = [f"¦{group}¦"]
-        
-        if not os.path.isfile(self.txt_dir):
+        txt_dir = txt_dir if txt_dir is not None else self.txt_dir
+        if not os.path.isfile(txt_dir):self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
             self.logger.debug("Расписание не найдено")
-            self.rasp_exists = False
             return ['Расписания нету!']
-        else:
-            self.rasp_exists = True
 
-        with open(self.txt_dir, "r", encoding="windows-1251") as file:
+        with open(txt_dir, "r", encoding="windows-1251") as file:
             content = file.read()
 
         lines = content.splitlines()
         inside_classes = False  # Флаг, указывающий, что мы находимся внутри уроков из classes
 
         for line in lines:
-            if any(separator in line for separator in ["+----+--+--------------+---+---------------+", "L----+--+--------------+---+----------------", "Evaluation Only"]):
+            if ("+----+--+--------------+---+---------------+" in line
+                    or "L----+--+--------------+---+----------------" in line):
+                inside_classes = False
+                continue  # Пропустить строку-разделитель
+
+            if "Evaluation Only" in line:
                 inside_classes = False
                 continue  # Пропустить строку-разделитель
 
@@ -142,46 +216,12 @@ class Rasp:
                             f"{rasp_info_process['lesson_number']} | {rasp_info_process['subject']} "
                             f"| {rasp_info_process['classroom_number']} | {rasp_info_process['teacher']}"
                         )
-                        self.logger.debug(f"Добавлено расписание: {rasp_info_process}")
+                        # self.logger.debug(f"Добавлено расписание: {rasp_info_process}")
 
             return rasp_list_done
 
         self.logger.debug("Расписания нету!")
         return ['Расписания нету!']
-
-    def rasp_parse(self, teach: str):
-        rasp_list = []
-        rasp_list_done = []
-        classes = [f"¦{teach}¦"]
-        
-        if not os.path.isfile(self.txt_dir):
-            self.logger.debug("Расписание не найдено")
-            return ['Расписания нету!']
-
-        with open(self.txt_dir, "r", encoding="windows-1251") as file:
-            content = file.read()
-
-        lines = content.splitlines()
-        inside_classes = False  # Флаг, указывающий, что мы находимся внутри уроков из classes
-
-        for line in lines:
-            line = line.replace(" ", '').replace("\xa0", "")
-            if any(separator in line for separator in ["+--------------+----+----+----+----+----+----+----¦", "L--------------¦----+----+----+----+----+----+----- ", "Evaluation Only"]):
-                inside_classes = False
-                continue  # Пропустить строку-разделитель
-
-            if inside_classes:
-                if line.strip():  # Проверка, что строка не пустая или состоит только из пробелов
-                    rasp_list.append(line)
-                else:
-                    inside_classes = False
-                continue  # Перейти к следующей строке
-
-            if any(class_item in line for class_item in classes):
-                rasp_list.append(line)
-                inside_classes = True
-        return rasp_list
-    
     # def teach_rasp_data_get(self, schedule_data: list[str])  -> dict[int, dict]:
         
 
@@ -204,15 +244,15 @@ class Rasp:
                 "teacher": parts[5],
             }
 
-            self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
+            # self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
 
         return schedule_info
 
-    async def get_rasp(self, group: int, _get_new: bool = False):
+    async def get_rasp(self, group: int, _get_new: bool = False, txt_dir: str = None, check_diff: bool = True):
         self.logger.debug(f"Получение расписания для группы: {group}")
         if _get_new is True: 
-            await self.get()
-        _rasp = self.rasp_parse(group)
+            await self.get(check_diff)
+        _rasp = self.rasp_parse(group, txt_dir)
         return "\n".join(_rasp)
 
 
@@ -225,16 +265,32 @@ class Rasp:
         days_week = days_of_week_ru[day_of_week]
         return days_week
 
+    from typing import Literal
+    def gen_head_text(self, group: str, mode: Literal["rasp-change", 'new-rasp', "None"], rasp_mode: Literal["main", "sec"]):
+        day_of_week = str(self.days_of_week(self.date))
+        head = {
+            "rasp-change": f"<b>Расписание изменилось!</b>",
+            'new-rasp': f"<b>Вышло новое расписание!</b>",
+            "None": ''
+        }
+        footer = {
+            "main": f"<b>{self.date.replace('_', '.')}           {day_of_week}           {group}</b>",
+            "sec": f"<b>________________________________________</b>\n<b>{self.date.replace('_', '.')}           {day_of_week}           {group}</b>",
+        }
+        if mode != "None":
+            return f'{head.get(mode)}\n{footer.get(rasp_mode)}'
+        else:
+            return f'{footer.get(rasp_mode)}'
+
     async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False):
         _rasp_text = await self.get_rasp(group, _get_new)
-        day_of_week = str(self.days_of_week(self.date))
         sec_head_text = ''
         _sec_rasp_text = ''
         if sec_group is not None:
-            sec_head_text = f"<b>________________________________________</b>\n<b>{self.date.replace('_', '.')}           {day_of_week}           {sec_group}</b>"
+            sec_head_text = self.gen_head_text(sec_group, mode='None', rasp_mode="sec")
             _sec_rasp_text += await self.get_rasp(sec_group, _get_new)
         
-        head_text = f"<b>{self.date.replace('_', '.')}           {day_of_week}           {group}</b>"
+        head_text = self.gen_head_text(group, mode='None', rasp_mode="main")
         text = f"""
 {head_text}
 
@@ -266,22 +322,51 @@ class CheckRasp(Rasp):
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
         self.logger.debug(f"Инициализация CheckRasp с датой: {self.date}")
         self.db = DB()
+        super().__init__(self.date, self.is_teacher)
+
     
+    async def send_rasp(self, user: list, date: str, group: int, mode: Literal['new-rasp', 'rasp-change'], rasp_text: str = None):
+        self.logger.info(f"Отправка расписания для пользователя: {user} и даты: {date}")
+        if rasp_text is None: rasp_text = await self.get_rasp(group, _get_new=True, check_diff=False)
+        text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
+        try: 
+            msg = await bot.send_message(
+                chat_id=user,
+                text=text
+            )
+            self.logger.debug(f"Расписание успешно отправлено в {user}, номер группы: {group}")
+            return True
+        except Exception as e:
+            self.logger.debug(f"Произошла ошибка при отправке расписания в {user}, номер группы: {group}. e={str(e)}")
+            if str(e) == "Telegram server says - Forbidden: bot was blocked by the user":
+                db = DB()
+                await db.delete(user_id=user)
+                return "bot_blocked"
+            elif str(e) == "Telegram server says - Bad Request: not enough rights to manage pinned messages in the chat":
+                await msg.reply("Не удалось закрепить новое расписание :(\nНазначьте меня как Админа и выдайте только право закрепления сообщений и удаление их.")
+                return True
+            else:
+                return False
 
-    async def send_rasp(self, users: list, date: str):
-        self.logger.info(f"Отправка расписания для пользователей: {users} и даты: {date}")
-
-
-    def _create_tasks(self):
+    def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change']):
         groups = self.db.get_all_usersWgroup()
         tasks = []
-        for group in groups.keys():
-            users = groups.get(group, [])
-            tasks.append([self.send_rasp(users, self.date)])
+        for group, users in groups.items():
+            if users != []:
+                for user in users:
+                    tasks.append(self.send_rasp(user, self.date, group, mode))
+        return tasks
+
+    def _create_tasks_change(self, mode: Literal['new-rasp', 'rasp-change'], groups: dict = {}, rasp_text: str = None):
+        tasks = []
+        for group, users in groups.items():
+            if users != []:
+                for user in users:
+                    tasks.append(self.send_rasp(user, self.date, group, mode, rasp_text))
         return tasks
 
     async def send_rasp_test(self):
-        tasks = self._create_tasks()
+        tasks = self._create_tasks(mode="new-rasp")
         await asyncio.gather(*tasks)
 
     async def check_rasp_loop(self):
@@ -292,13 +377,14 @@ class CheckRasp(Rasp):
                     #TODO: Тут проверка изменилось ли
                     continue
                 else:
-                    tasks = self._create_tasks()
+                    tasks = self._create_tasks(mode="new-rasp")
                     await asyncio.gather(*tasks)
                     
 
 
 async def main():
-    checkrasp = CheckRasp("")
+    checkrasp = CheckRasp("31_10_2024")
+    await checkrasp.send_rasp_test()
 
 
 

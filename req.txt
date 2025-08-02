@@ -1,3 +1,4 @@
 aiogram>3
 colorama
-aspose-cells-python
+beautifulsoup4
+lxml

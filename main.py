@@ -10,8 +10,14 @@ def start_bot():
     asyncio.create_task(dp.start_polling(bot, close_bot_session=False, handle_signals=False))
 
 
+def cmds():
+    asyncio.create_task(bot.set_my_commands([
+        types.BotCommand(command="/start", description="Главное меню"),
+        types.BotCommand(command="/settings", description="Настройки"),
+    ]))
+
 def create_dirs():
-    dirs = ["logs", "data", "data/txt", "data/htm", "db", "data/teach_txt"]
+    dirs = ["logs", "data", "data/txt", "data/htm", "db", "data/teach_txt", 'data/old_txt']
     import os
     for dir in dirs:
         os.makedirs(dir, exist_ok=True)
@@ -22,7 +28,8 @@ async def __init__():
         {"name": "создание нужных директорий", "func": create_dirs},
         {"name": "логирование", "func": create_logger, "args": __name__},
         {"name": "БД", "func": DB},
-        {"name": "бота", "func": start_bot}
+        {"name": "бота", "func": start_bot},
+        {"name": "установку команд", "func": cmds}
     ]
     for module in modules:
         print(f"Инициализирую {module['name']}... ", end='', flush=False)

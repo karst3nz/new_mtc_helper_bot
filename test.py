@@ -25,36 +25,7 @@
 # 3 | test11 | 020 | test_teach
 # """
 
-# def compare_texts(t1, t2):
-#     import difflib
-#     t1_lines = [line for line in t1.strip().splitlines()]
-#     t2_lines = [line for line in t2.strip().splitlines()]
-#     diff = list(difflib.ndiff(t1_lines, t2_lines))
-#     result = []
-#     i = 0
-#     while i < len(diff):
-#         line = diff[i]
-#         if line.startswith("  "):
-#             # Одинаковые строки
-#             result.append(line[2:])
-#             i += 1
-#         elif line.startswith("- "):
-#             # Удалено
-#             if i + 1 < len(diff) and diff[i + 1].startswith("+ "):
-#                 # Замена строки
-#                 result.append(f"<s>{line[2:]}</s>")
-#                 result.append(f"<b><i>{diff[i + 1][2:]}</i></b>")
-#                 i += 2
-#             else:
-#                 result.append(f"<s>{line[2:]}</s>")
-#                 i += 1
-#         elif line.startswith("+ "):
-#             # Добавлено (если не после удаления — иначе уже обработано как замена)
-#             result.append(f"<b><i>{line[2:]}</i></b>")
-#             i += 1
-#         else:
-#             i += 1
-#     return "\n".join(result)
+
 
 
 
@@ -73,9 +44,3 @@
 
 # asyncio.run(test())
 
-from db import DB
-from pprint import pprint
-db = DB()
-_ = db.get_all_usersWgroup()
-for i in _.keys():
-    print(i)
