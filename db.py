@@ -1,5 +1,4 @@
 import asyncio
-from re import T
 import sqlite3
 from aiogram import types
 import os
@@ -56,6 +55,15 @@ class DB:
         btns = [
             [types.InlineKeyboardButton(text="Профиль", url=f"tg://user?id={user_id}")]
         ]
+        user_text = (
+            "🎉 Спасибо, что выбрали моего бота!\n"
+            "Если возникнут вопросы или пожелания, пишите — @Karst3nz\n"
+        )
+        user_btns = [
+            [types.InlineKeyboardButton(text="🔔 Подписаться на канал", url="https://t.me/+Poh4QOaM6oplMWIy")],
+            [types.InlineKeyboardButton(text="💬 Связаться с автором", url=f"tg://user?id={ADMIN_ID}")]
+        ]
+        asyncio.create_task(bot.send_message(chat_id=user_id, text=user_text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=user_btns)))
         asyncio.create_task(bot.send_message(chat_id=ADMIN_ID, text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns)))
 
     def is_exists(self, user_id: int):
@@ -173,4 +181,22 @@ class DB:
         except Exception as e:
             self.logger.error(e)
 
-    
+    def return_user_data(self, user_id: int):
+        if self.is_exists(user_id) is False: return f"Пользователь <b>{user_id}</b> не найден в базе!"
+        try:
+            from utils.dataclasses_ import User
+            r = self.cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            user = User(*r)
+            text = (
+                f"Информация о пользователе:\n"
+                f"- DB_ID: {user.id}\n"
+                f'- Telegram ID: {user.user_id}\n'
+                f'- Telegram username: @{user.tg_username}\n'
+                f'- Номер группы: {user.group_id}\n'
+                f'- Доп. номер группы: {user.sec_group_id}\n'
+                f'- Кол. пропущенных часов: {user.missed_hours}\n'
+                f'- Режим показа пропущенных часов: {user.show_missed_hours_mode}\n'
+            )
+            return text
+        except Exception as e:
+            self.logger.error(e)    

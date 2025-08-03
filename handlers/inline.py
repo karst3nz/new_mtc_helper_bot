@@ -43,7 +43,7 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
 
     menu: Callable | None = globals().get(menu_name)
     if menu is None:
-        text = "Меню не найдено…"
+        text = "❌ Меню не найдено"
         btns = types.InlineKeyboardMarkup(
             inline_keyboard=[[
                 types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")
@@ -67,7 +67,7 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
                         text, btns = await menu(call.from_user.id, state)
                     except Exception as e:
                         logger.error(e)
-                        text = "Не удалось вызвать меню…"
+                        text = "❌ Не удалось загрузить меню"
                         btns = types.InlineKeyboardMarkup(
                             inline_keyboard=[[
                                 types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")

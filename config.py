@@ -9,7 +9,6 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 import asyncio
 from aiogram import types
-from aiogram import F
 from state import States
 from aiogram.filters.chat_member_updated import \
     ChatMemberUpdatedFilter, IS_NOT_MEMBER, MEMBER, ADMINISTRATOR
@@ -38,7 +37,7 @@ groups = [
         "1196", "1111", "2291", "2391", "2392", "2395", "3311", "3312", 
         "2191", "2195", "2196", "2211", "1291", "2311", "3392", "4391",
         '4392', '4393', '4394', '4191', '4192', '4193', '4491', '4595',
-        '4596', '4311', '4312', '4111'
+        '4596', '4311', '4312', '4111', "0000"
     ]
 
 

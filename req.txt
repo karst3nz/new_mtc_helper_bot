@@ -1,4 +1,2 @@
 aiogram>3
 colorama
-beautifulsoup4
-lxml

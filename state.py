@@ -10,3 +10,5 @@ class States(StatesGroup):
     sec_reg_group = State()
     change_main_group = State()
     change_sec_group = State()
+    db_group_info = State()
+    db_user_info = State()

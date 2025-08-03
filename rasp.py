@@ -1,9 +1,6 @@
 from datetime import datetime, timedelta
 import os
-from pickle import TRUE
-from tabnanny import check
 import tempfile
-import time
 from typing import Literal
 import aiohttp
 from aspose.cells import Workbook
@@ -270,8 +267,8 @@ class Rasp:
     def gen_head_text(self, group: str, mode: Literal["rasp-change", 'new-rasp', "None"], rasp_mode: Literal["main", "sec"]):
         day_of_week = str(self.days_of_week(self.date))
         head = {
-            "rasp-change": f"<b>Расписание изменилось!</b>",
-            'new-rasp': f"<b>Вышло новое расписание!</b>",
+            "rasp-change": f"🔄 <b>Расписание изменилось!</b>",
+            'new-rasp': f"📢 <b>Вышло новое расписание!</b>",
             "None": ''
         }
         footer = {
@@ -328,7 +325,7 @@ class CheckRasp(Rasp):
     
     async def send_rasp(self, user: list, date: str, group: int, mode: Literal['new-rasp', 'rasp-change'], rasp_text: str = None):
         self.logger.info(f"Отправка расписания для пользователя: {user} и даты: {date}")
-        if rasp_text is None: rasp_text = await self.get_rasp(group, _get_new=True, check_diff=False)
+        if rasp_text is None: rasp_text = await self.get_rasp(group, _get_new=False, check_diff=False)
         text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
         try: 
             msg = await bot.send_message(
@@ -344,7 +341,7 @@ class CheckRasp(Rasp):
                 await db.delete(user_id=user)
                 return "bot_blocked"
             elif str(e) == "Telegram server says - Bad Request: not enough rights to manage pinned messages in the chat":
-                await msg.reply("Не удалось закрепить новое расписание :(\nНазначьте меня как Админа и выдайте только право закрепления сообщений и удаление их.")
+                await msg.reply("❌ Не удалось закрепить новое расписание\n\n🔧 Для закрепления сообщений назначьте меня администратором с правами:\n• Закрепление сообщений\n• Удаление сообщений")
                 return True
             else:
                 return False

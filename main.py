@@ -12,8 +12,8 @@ def start_bot():
 
 def cmds():
     asyncio.create_task(bot.set_my_commands([
-        types.BotCommand(command="/start", description="Главное меню"),
-        types.BotCommand(command="/settings", description="Настройки"),
+        types.BotCommand(command="/start", description="🎓 Главное меню"),
+        types.BotCommand(command="/settings", description="⚙️ Настройки"),
     ]))
 
 def create_dirs():
