@@ -185,7 +185,7 @@ class DB:
         if self.is_exists(user_id) is False: return f"Пользователь <b>{user_id}</b> не найден в базе!"
         try:
             from utils.dataclasses_ import User
-            r = self.cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode FROM users WHERE user_id = ?", (user_id,)).fetchone()
             user = User(*r)
             text = (
                 f"Информация о пользователе:\n"

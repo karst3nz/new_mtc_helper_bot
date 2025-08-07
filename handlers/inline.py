@@ -1,3 +1,4 @@
+from re import T
 import aiogram.exceptions
 from config import *
 from log import create_logger
@@ -12,7 +13,10 @@ logger = create_logger(__name__)
 async def ad1(call: types.CallbackQuery, state: FSMContext):
     async def send(user_id: int, msg2forward: types.Message):
         try:
-            await msg2forward.forward(chat_id=user_id)
+            await bot.send_message(
+                chat_id=user_id,
+                text=msg2forward.html_text
+            )
             logger.info(f"Рассылка успешно отправлена к user_id={user_id}")
             return True
         except Exception as e:
@@ -37,7 +41,10 @@ async def ad1(call: types.CallbackQuery, state: FSMContext):
         for user_id in user_ids:
             tasks.append(send(user_id, msg2forward))
         # Вынесем gather из цикла, чтобы не было ошибки reuse coroutine
-        await asyncio.gather(*tasks)
+        r = await asyncio.gather(*tasks)
+        success = r.count(True)
+        errors = r.count(False)    
+        await call.message.answer(text=f"success={success}\nerrors={errors}")    
     else:
         await call.message.answer("Отменено")
     if msg2delete is not None:
