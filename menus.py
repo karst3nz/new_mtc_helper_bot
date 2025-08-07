@@ -160,3 +160,9 @@ async def db_group(user_id: int, state: FSMContext):
 async def db_user(user_id: int, state: FSMContext):
     await state.set_state(States.db_user_info)
     return 'user_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
+
+
+@if_admin("user_id")
+async def ad(user_id: int, state: FSMContext):
+    await state.set_state(States.ad_msg)
+    return "Отправь текст", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="Отмена", callback_data="menu:admin")]])

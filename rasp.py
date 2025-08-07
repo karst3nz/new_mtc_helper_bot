@@ -220,8 +220,7 @@ class Rasp:
 
         self.logger.debug("Расписания нету!")
         return ['Расписания нету!']
-    # def teach_rasp_data_get(self, schedule_data: list[str])  -> dict[int, dict]:
-        
+
 
     def rasp_data_get(self, schedule_data: list[str]) -> dict[int, dict]:
         schedule_info: dict[int, dict] = {}

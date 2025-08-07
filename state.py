@@ -12,3 +12,5 @@ class States(StatesGroup):
     change_sec_group = State()
     db_group_info = State()
     db_user_info = State()
+    ad_msg = State()
+    ad_confirm = State()

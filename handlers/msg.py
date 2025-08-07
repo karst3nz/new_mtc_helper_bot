@@ -78,3 +78,23 @@ async def db_user_info(msg: types.Message, state: FSMContext):
         [types.InlineKeyboardButton(text='< Назад', callback_data="menu:database")]
     ]
     await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
+
+
+
+@dp.message(States.ad_msg)
+@if_admin("msg")
+async def ad_msg(msg: types.Message, state: FSMContext):
+    await state.set_state(States.ad_confirm)
+    await state.update_data(msg2forward=msg)
+    msg2delete = []
+    msg2delete.append(msg.message_id)
+    msg2delete.append((await msg.forward(chat_id=msg.from_user.id)).message_id)
+    btns = [
+        [types.InlineKeyboardButton(text="Да", callback_data="ad_confirm"), types.InlineKeyboardButton(text="Нет", callback_data="ad_deny")]
+    ]
+    msg2delete.append((await msg.answer(text="Отправлять?", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))).message_id)
+    await state.update_data(msg2delete=msg2delete)
+
+
+
+

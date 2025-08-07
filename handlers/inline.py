@@ -1,11 +1,50 @@
 import aiogram.exceptions
 from config import *
 from log import create_logger
-import ast
 from typing import Callable
 from menus import *
+import ast
 logger = create_logger(__name__)
 
+
+@dp.callback_query(F.data.startswith("ad_"))
+@if_admin("call")
+async def ad1(call: types.CallbackQuery, state: FSMContext):
+    async def send(user_id: int, msg2forward: types.Message):
+        try:
+            await msg2forward.forward(chat_id=user_id)
+            logger.info(f"Рассылка успешно отправлена к user_id={user_id}")
+            return True
+        except Exception as e:
+            logger.info(f"Рассылка не была отправлена к user_id={user_id}; e={str(e)}")
+            return False
+
+    action = call.data.split("_")[1]
+    state_data = await state.get_data()
+    await state.clear()
+
+    # Безопасно получаем сообщения из state_data
+    msg2forward: types.Message = state_data.get("msg2forward")
+    msg2delete = state_data.get("msg2delete")
+
+    if action == "confirm":
+        if msg2forward is None:
+            await call.message.answer("❌ Не найдено сообщение для рассылки. Попробуйте начать заново.")
+            return
+        tasks = []
+        db = DB()
+        user_ids = db.get_all("user_id", db.users_table)
+        for user_id in user_ids:
+            tasks.append(send(user_id, msg2forward))
+        # Вынесем gather из цикла, чтобы не было ошибки reuse coroutine
+        await asyncio.gather(*tasks)
+    else:
+        await call.message.answer("Отменено")
+    if msg2delete is not None:
+        try:
+            await bot.delete_messages(chat_id=call.from_user.id, message_ids=msg2delete)
+        except Exception as e:
+            logger.warning(f"Ошибка при удалении сообщений: {e}")
 
 @dp.callback_query(F.data == F.data)
 async def inline_handler(call: types.CallbackQuery, state: FSMContext):
