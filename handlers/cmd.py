@@ -34,7 +34,7 @@ async def start(msg: types.Message, state: FSMContext):
 async def rasp(msg: types.Message, state: FSMContext):
     await state.clear()
     date = msg.text.split("/rasp")[1].replace(" ", '')
-    text, btns = await menus.rasp(msg.from_user.id, date=date, _get_new=True)
+    text, btns = await menus.rasp(msg.from_user.id, date=date, _get_new=False)
     await msg.answer(
         text=text,
         reply_markup=btns

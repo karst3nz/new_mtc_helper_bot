@@ -265,14 +265,21 @@ class Rasp:
     from typing import Literal
     def gen_head_text(self, group: str, mode: Literal["rasp-change", 'new-rasp', "None"], rasp_mode: Literal["main", "sec"]):
         day_of_week = str(self.days_of_week(self.date))
+        date_obj = datetime.strptime(self.date, "%d_%m_%Y")
+        day = date_obj.day
+        month = date_obj.month
+        if (month == 12 and day >= 28) or (month == 1 and day <= 3):
+            date_str = self.date.replace('_', '.')
+        else:
+            date_str = date_obj.strftime("%d.%m")
         head = {
             "rasp-change": f"🔄 <b>Расписание изменилось!</b>",
             'new-rasp': f"📢 <b>Вышло новое расписание!</b>",
             "None": ''
         }
         footer = {
-            "main": f"<b>{self.date.replace('_', '.')}           {day_of_week}           {group}</b>",
-            "sec": f"<b>________________________________________</b>\n<b>{self.date.replace('_', '.')}           {day_of_week}           {group}</b>",
+            "main": f"<b>{date_str}           {day_of_week}           {group}</b>",
+            "sec": f"<b>________________________________________</b>\n<b>{date_str}           {day_of_week}           {group}</b>",
         }
         if mode != "None":
             return f'{head.get(mode)}\n{footer.get(rasp_mode)}'

@@ -126,28 +126,37 @@ async def admin(user_id: int, state: FSMContext):
 async def database(user_id: int, state: FSMContext):
     db = DB()
     await state.clear()
-    db_all_users = ('Краткая сводка по БД:\n'
-                    f'Количество пользователей: {len(db.get_all("id", db.users_table))}\n\n'
-                    # f'Количество бесед: {len(db.get_all("tg_group_id", db.users_table))}\n'
-                    # f'Общее количество участников в беседах: '
-                    # f'{sum(int(db.get_all("count_members", db.users_table)))}\n'
-                    )
+    db_all_users = (
+        'Краткая сводка по БД:\n'
+        f'Количество пользователей: {len(db.get_all("id", db.users_table))}\n\n'
+        # f'Количество бесед: {len(db.get_all("tg_group_id", db.users_table))}\n'
+        # f'Общее количество участников в беседах: '
+        # f'{sum(int(db.get_all("count_members", db.users_table)))}\n'
+    )
     border = "*________________________________________*"
     group_info_start = 'Информация по группам:'
-    group = db.get_all("group_id", db.users_table)
-    final_list_group = []
-    for item in config.groups:
-        count_of_ones = len([x for x in group if str(x) == item])
-        if count_of_ones == 0:
-            continue
-        else:
-            final_list_group.append(f"{item} - {count_of_ones}")
-    final_list_group.sort(key=lambda x: int(x.split(' - ')[1]), reverse=True)
+
+    # Получаем все значения group_id из таблицы users
+    all_group_ids = db.get_all("group_id", db.users_table)
+    # Оставляем только не пустые и не None значения
+    all_group_ids = [g for g in all_group_ids if g not in (None, '', 'None')]
+
+    # Считаем количество пользователей в каждой группе
+    from collections import Counter
+    group_counter = Counter(all_group_ids)
+
+    # Сортируем группы по количеству пользователей по убыванию
+    final_list_group = [
+        f"{group} - {count}" for group, count in group_counter.most_common()
+    ]
+
     group_text = ''
     for x in final_list_group:
         group_text += x + "\n"
+
     y = format_and_return_columns(group_text)
-    final_text = f"{db_all_users}" + f"{border}\n" + f"{group_info_start}\n" + f"{y}"
+    final_text = f"{db_all_users}{border}\n{group_info_start}\n{y}"
+
     db_info_buttons = [
         [types.InlineKeyboardButton(text="Выгрузить информацию по группе", callback_data="menu:db_group")],
         [types.InlineKeyboardButton(text="Выгрузить информацию по человеку", callback_data="menu:db_user")],

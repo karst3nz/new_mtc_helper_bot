@@ -58,8 +58,22 @@
 # print(groups)
 
 
-from db import DB
+# from db import DB
 
 
-db = DB()
-db.return_user_dataclass("1823563959")
+# db = DB()
+# db.return_user_dataclass("1823563959")
+
+import asyncio
+
+
+
+async def get_all_promo_stats(): print(1)
+
+
+
+async def _():
+    asyncio.create_task(get_all_promo_stats())
+
+
+asyncio.run(_())

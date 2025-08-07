@@ -98,15 +98,15 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
         try:
             text, btns = await menu(call.from_user.id, *args, state)
         except Exception as e:
-            logger.error(e)
+            # logger.error(e)
             try:
                 text, btns = await menu(call.from_user.id, *args)
             except Exception as e:
-                logger.error(e)
+                # logger.error(e)
                 try:
                     text, btns = await menu(*args, state)
                 except Exception as e:
-                    logger.error(e)
+                    # logger.error(e)
                     try:
                         text, btns = await menu(call.from_user.id, state)
                     except Exception as e:
