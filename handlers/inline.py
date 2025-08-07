@@ -65,8 +65,6 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
     if not call.data.startswith("menu:"):
         return
 
-    await state.clear()
-
     menu_data = call.data[len("menu:"):]
     if "?" in menu_data:
         menu_name, raw_args = menu_data.split("?", 1)

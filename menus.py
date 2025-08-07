@@ -23,6 +23,7 @@ async def rasp(user_id: int, date: str = None, _get_new: bool = False):
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 async def start(user_id: int, state: FSMContext): 
+    await state.clear()
     if DB().is_exists(user_id) is False:
         text = "👋 Привет! Я бот для просмотра расписания занятий.\n\n📝 Для начала работы, пожалуйста, отправьте номер вашей группы:"
         await state.set_state(States.first_reg_group)
@@ -39,7 +40,7 @@ async def start(user_id: int, state: FSMContext):
 
 async def skip_sec_group(user_id: int, state: FSMContext):
     state_data = await state.get_data()
-    group = state_data.get("group", "0000")
+    group = state_data.get("group")
     await state.clear()
     db = DB()
     db.insert(
@@ -55,6 +56,7 @@ async def skip_sec_group(user_id: int, state: FSMContext):
 async def settings(user_id: int, state: FSMContext):
     db = DB()
     group, sec_group = db.get_user_groups(user_id)
+    await state.clear()
     text = f"⚙️ Настройки профиля\n\n📋 Основная группа: <b>{group}</b>"
     if sec_group is not None:
         text += f"\n📋 Дополнительная группа: <b>{sec_group}</b>"
@@ -72,6 +74,7 @@ async def settings(user_id: int, state: FSMContext):
 async def change_main_group(user_id: int, state: FSMContext):
     db = DB()
     group, sec_group = db.get_user_groups(user_id)
+    await state.clear()
     text = f"✏️ Изменение основной группы\n\n📋 Текущая группа: <b>{group}</b>\n\n📝 Отправьте новый номер группы:"
     btns = [
         [types.InlineKeyboardButton(text="❌ Отменить", callback_data="menu:settings")]
@@ -82,6 +85,7 @@ async def change_main_group(user_id: int, state: FSMContext):
 async def change_sec_group(user_id: int, state: FSMContext):
     db = DB()
     group, sec_group = db.get_user_groups(user_id)
+    await state.clear()
     if sec_group is not None:
         text = f"✏️ Изменение дополнительной группы\n\n📋 Текущая доп. группа: <b>{sec_group}</b>\n\n📝 Отправьте новый номер группы:"
     else:
@@ -96,6 +100,7 @@ async def change_sec_group(user_id: int, state: FSMContext):
 
 async def delete_sec_group(user_id: int, state: FSMContext):
     db = DB()
+    await state.clear()
     btns = [
         [types.InlineKeyboardButton(text="◀️ Вернуться", callback_data="menu:settings")]
     ]
@@ -108,6 +113,7 @@ async def delete_sec_group(user_id: int, state: FSMContext):
 @if_admin("user_id")
 async def admin(user_id: int, state: FSMContext):
     text = "ADMIN"
+    await state.clear()
     btns = [
         [types.InlineKeyboardButton(text="Рассылка", callback_data="menu:ad")],
         [types.InlineKeyboardButton(text="База Данных", callback_data="menu:database")],
@@ -152,17 +158,20 @@ async def database(user_id: int, state: FSMContext):
 
 @if_admin("user_id")
 async def db_group(user_id: int, state: FSMContext):
+    await state.clear()
     await state.set_state(States.db_group_info)
     return 'group_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
 
 
 @if_admin("user_id")
 async def db_user(user_id: int, state: FSMContext):
+    await state.clear()
     await state.set_state(States.db_user_info)
     return 'user_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
 
 
 @if_admin("user_id")
 async def ad(user_id: int, state: FSMContext):
+    await state.clear()
     await state.set_state(States.ad_msg)
     return "Отправь текст", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="Отмена", callback_data="menu:admin")]])
