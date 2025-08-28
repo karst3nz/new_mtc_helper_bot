@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
+import logging
 import os
 import tempfile
 from typing import Literal
+import asyncio
 import aiohttp
 from aspose.cells import Workbook
 from db import DB
@@ -12,9 +14,9 @@ from config import *
 class Rasp:
     def __init__(self, date: str = None, is_teacher: bool = False) -> None:
         self.is_teacher = is_teacher
-        self.logger = create_logger("Rasp", level="DEBUG")
+        self.logger = create_logger("Rasp", level=logging.INFO)
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
-        self.logger.debug(f"Инициализация Rasp с датой: {self.date}")
+        self.logger.info(f"Инициализация Rasp с датой: {self.date}")
         self.dateWyear = self.date.split('_')[:2][0] + "_" + self.date.split('_')[:2][1]
         self.rasp_exists = False
         if not self.is_teacher:
@@ -55,27 +57,53 @@ class Rasp:
 
     async def run_session(self): 
         self.logger.debug("Запуск сессии")
-        self.session = aiohttp.ClientSession(headers=self.headers)
+        try:
+            self.session = aiohttp.ClientSession(headers=self.headers)
+        except Exception as e:
+            self.logger.error(f"Не удалось создать сессию aiohttp: {e}")
+            raise
 
     async def close_session(self):  
         self.logger.debug("Закрытие сессии")
-        await self.session.close()
+        try:
+            if hasattr(self, "session"):
+                await self.session.close()
+        except Exception as e:
+            self.logger.warning(f"Исключение при закрытии сессии: {e}")
 
     async def _make_request(self):
         await self.run_session()
-        self.logger.debug(f"Отправка запроса на {self.url}")
-        async with self.session.get(self.url) as response:
-            if response.status >= 400:
-                self.logger.debug(f"Запрос выполнен неуспешно, статус: {response.status}")
-                self.rasp_exists = False
-                await self.close_session()
-                return None 
-            else:
+        self.logger.info(f"Отправка запроса на {self.url}")
+        try:
+            timeout = aiohttp.ClientTimeout(total=20)
+            async with self.session.get(self.url, timeout=timeout) as response:
+                status = response.status
+                if 400 <= status < 500:
+                    self.logger.warning(f"HTTP {status} при запросе {self.url}")
+                    self.rasp_exists = False
+                    return None
+                if status >= 500:
+                    self.logger.error(f"HTTP {status} (серверная ошибка) при запросе {self.url}")
+                    self.rasp_exists = False
+                    return None
                 r = await response.read()
-                self.logger.debug(f"Запрос выполнен успешно, статус: {response.status}")
+                self.logger.info(f"Запрос выполнен успешно, статус: {status}, получено байт: {len(r)}")
                 self.rasp_exists = True
-                await self.close_session()
                 return r
+        except aiohttp.ClientError as e:
+            self.logger.error(f"Сетевая ошибка при запросе {self.url}: {e}")
+            self.rasp_exists = False
+            return None
+        except asyncio.TimeoutError:
+            self.logger.error(f"Таймаут при запросе {self.url}")
+            self.rasp_exists = False
+            return None
+        except Exception as e:
+            self.logger.error(f"Необработанное исключение при запросе {self.url}: {e}")
+            self.rasp_exists = False
+            return None
+        finally:
+            await self.close_session()
 
 
     @staticmethod
@@ -116,52 +144,90 @@ class Rasp:
 
     async def check_diff(self):
         from config import groups
-        self.logger.debug("Проверка изменений в расписании")
+        self.logger.info("Проверка изменений в расписании")
         checkrasp = CheckRasp(self.date, self.is_teacher)
         db = DB()
+        # Сброс состояния дедупликации перед новым проходом сравнения
+        checkrasp._sent_users.clear()
+        checkrasp._broadcast_sent = False
         for group in groups:
-            old_text = await self.get_rasp(group=group, txt_dir=self.old_txt_dir)
-            new_text = await self.get_rasp(group=group, txt_dir=self.txt_dir)
-            diff, status = self.compare_texts(old_text, new_text)
-            if status is True:
-                self.logger.info(f"[DEBUG] DIFF {group} {status} [DEBUG]\n{diff}")
-                self.logger.debug(f"Обнаружено изменение в расписании для группы {group}")
-                groups = db.get_all_usersBYgroup(group)
-                self.logger.debug(diff)
-                if "<s>Расписания нету!</s>" in diff: 
-                    tasks = checkrasp._create_tasks(mode="new-rasp")
-                    await asyncio.gather(*tasks)
-                else: 
+            try:
+                old_text = await self.get_rasp(group=group, txt_dir=self.old_txt_dir)
+                new_text = await self.get_rasp(group=group, txt_dir=self.txt_dir)
+                diff, status = self.compare_texts(old_text, new_text)
+                self.logger.debug(f"Группа {group}: изменения обнаружены={status}")
+                if status is True:
+                    # # Причина выбора режима отправки
+                    # if "<s>Расписания нету!</s>" in diff:
+                    #     if not checkrasp._broadcast_sent:
+                    #         self.logger.info(f"Группа {group}: новое расписание (причина: исчезла строка 'Расписания нету!'). Запускаю одноразовую рассылку new-rasp")
+                    #         tasks = checkrasp._create_tasks(mode="new-rasp")
+                    #         checkrasp._broadcast_sent = True
+                    #         await asyncio.gather(*tasks)
+                    #     else:
+                    #         self.logger.debug("Одноразовая рассылка new-rasp уже выполнена в этом проходе — пропускаю")
+                    # else:
+                    self.logger.info(f"Группа {group}: изменение расписания (причина: найден diff). Длина diff: {len(diff)} символов")
+                    groups = db.get_all_usersBYgroup(group)
                     tasks = checkrasp._create_tasks_change(mode="rasp-change", groups=groups, rasp_text=diff)
                     await asyncio.gather(*tasks)
+            except Exception as e:
+                self.logger.error(f"Ошибка при проверке изменений для группы {group}: {e}")
+                continue
                 
 
     async def convert_htm2txt(self, check_diff: bool = True):
-        self.logger.debug("Конвертация HTML в TXT")
-        workbook = Workbook(self.temp_file_dir)
-        if os.path.exists(self.txt_dir):
-            os.remove(self.txt_dir)
-            self.logger.debug(f"Файл {self.txt_dir} уже существует, перемещаю в {self.old_txt_dir}")
-            workbook.save(self.txt_dir)
-            if check_diff: await self.check_diff()
-            if os.path.exists(self.old_txt_dir):
-                os.remove(self.old_txt_dir)
-            os.replace(self.txt_dir, self.old_txt_dir)
-            workbook.save(self.txt_dir)
-        else:
-            workbook.save(self.txt_dir)
-        self.logger.debug(f"Файл сохранен как {self.txt_dir}")
+        self.logger.info("Конвертация HTML в TXT")
+        try:
+            workbook = Workbook(self.temp_file_dir)
+        except Exception as e:
+            self.logger.error(f"Не удалось открыть временный файл как Workbook: {self.temp_file_dir}, ошибка: {e}")
+            return
+        try:
+            if os.path.exists(self.txt_dir):
+                self.logger.info(f"Файл {self.txt_dir} уже существует, перемещаю в {self.old_txt_dir}")
+                # Перезапись текущего как текущий, затем сравнение и перенос в old
+                os.remove(self.txt_dir)
+                workbook.save(self.txt_dir)
+                if check_diff:
+                    await self.check_diff()
+                if os.path.exists(self.old_txt_dir):
+                    try:
+                        os.remove(self.old_txt_dir)
+                    except Exception as e:
+                        self.logger.warning(f"Не удалось удалить старый файл {self.old_txt_dir}: {e}")
+                os.replace(self.txt_dir, self.old_txt_dir)
+                workbook.save(self.txt_dir)
+            else:
+                workbook.save(self.txt_dir)
+                workbook.save(self.old_txt_dir)
+                checkrasp = CheckRasp(self.date, self.is_teacher)
+                if not checkrasp._broadcast_sent:
+                    self.logger.info(f"Новое расписание (причина: записан файл {self.txt_dir}). Запускаю одноразовую рассылку new-rasp")
+                    tasks = checkrasp._create_tasks(mode="new-rasp")
+                    checkrasp._broadcast_sent = True
+                    await asyncio.gather(*tasks)
+                else:
+                    self.logger.debug("Одноразовая рассылка new-rasp уже выполнена в этом проходе — пропускаю")
+            self.logger.info(f"Файл сохранен как {self.txt_dir}")
+        except Exception as e:
+            self.logger.error(f"Ошибка при сохранении TXT {self.txt_dir}: {e}")
 
     async def get(self, check_diff: bool = True):
-        self.logger.debug("Получение данных")
+        self.logger.info("Получение данных")
         self.rasp_response = await self._make_request()
         if self.rasp_response is None:
+            self.logger.warning("Данные не получены: ответ пустой или произошла ошибка")
             return
         self.temp_file_dir = os.path.join(tempfile.gettempdir(), f'{self.date}.htm')
-        with open(self.temp_file_dir, 'wb') as temp_file:
-            self.logger.debug(f"Запись данных во временный файл {self.temp_file_dir}")
-            temp_file.write(self.rasp_response)
-        self.logger.debug("Данные успешно записаны во временный файл")
+        try:
+            with open(self.temp_file_dir, 'wb') as temp_file:
+                self.logger.info(f"Запись данных во временный файл {self.temp_file_dir}")
+                temp_file.write(self.rasp_response)
+            self.logger.info("Данные успешно записаны во временный файл")
+        except Exception as e:
+            self.logger.error(f"Не удалось записать временный файл {self.temp_file_dir}: {e}")
+            return
         await self.convert_htm2txt(check_diff)
 
     def rasp_parse(self, group, txt_dir: str = None): 
@@ -170,11 +236,18 @@ class Rasp:
         classes = [f"¦{group}¦"]
         txt_dir = txt_dir if txt_dir is not None else self.txt_dir
         if not os.path.isfile(txt_dir):
-            self.logger.debug("Расписание не найдено")
+            self.logger.warning("Расписание не найдено: файл отсутствует %s", txt_dir)
             return ['Расписания нету!']
 
-        with open(txt_dir, "r", encoding="windows-1251") as file:
-            content = file.read()
+        try:
+            with open(txt_dir, "r", encoding="windows-1251") as file:
+                content = file.read()
+        except UnicodeDecodeError as e:
+            self.logger.error(f"Ошибка декодирования файла {txt_dir}: {e}")
+            return ['Расписания нету!']
+        except Exception as e:
+            self.logger.error(f"Ошибка чтения файла {txt_dir}: {e}")
+            return ['Расписания нету!']
 
         lines = content.splitlines()
         inside_classes = False  # Флаг, указывающий, что мы находимся внутри уроков из classes
@@ -197,14 +270,19 @@ class Rasp:
                 continue  # Перейти к следующей строке
 
             if any(class_item in line for class_item in classes):
+                self.logger.debug(f"Найдена секция группы {group} в файле")
                 rasp_list.append(line)
                 inside_classes = True
 
         if rasp_list:
             rasp_info = self.rasp_data_get(rasp_list)
             if isinstance(rasp_info, dict):
-                lesson_number_to_lookup = max(item['lesson_id'] for item in rasp_info.values() if item['lesson_id'])
-                lesson_id = min(item['lesson_id'] for item in rasp_info.values() if item['lesson_id']) - 1
+                try:
+                    lesson_number_to_lookup = max(item['lesson_id'] for item in rasp_info.values() if item['lesson_id'])
+                    lesson_id = min(item['lesson_id'] for item in rasp_info.values() if item['lesson_id']) - 1
+                except ValueError:
+                    self.logger.warning("Не удалось определить диапазон уроков для группы %s", group)
+                    return ['Расписания нету!']
                 
                 while lesson_id < lesson_number_to_lookup:
                     lesson_id += 1
@@ -214,11 +292,9 @@ class Rasp:
                             f"{rasp_info_process['lesson_number']} | {rasp_info_process['subject']} "
                             f"| {rasp_info_process['classroom_number']} | {rasp_info_process['teacher']}"
                         )
-                        self.logger.debug(f"Добавлено расписание: {rasp_info_process}")
 
             return rasp_list_done
 
-        self.logger.debug("Расписания нету!")
         return ['Расписания нету!']
 
 
@@ -227,6 +303,9 @@ class Rasp:
 
         for lesson_id, line in enumerate(schedule_data, start=1):
             parts = [part.strip() for part in line.split("¦")]
+            if len(parts) < 6:
+                self.logger.warning(f"Строка расписания имеет некорректный формат (мало столбцов): {line}")
+                continue
 
             group_number: str | None = parts[1] or None
             lesson_number_raw: str = parts[2]
@@ -241,7 +320,6 @@ class Rasp:
                 "teacher": parts[5],
             }
 
-            self.logger.debug("Урок %s: %s", lesson_id, schedule_info[lesson_id])
 
         return schedule_info
 
@@ -249,8 +327,12 @@ class Rasp:
         self.logger.debug(f"Получение расписания для группы: {group}")
         if _get_new is True: 
             await self.get(check_diff)
+            if not self.rasp_exists:
+                self.logger.warning("Не удалось обновить расписание — источник недоступен или ошибка загрузки")
         _rasp = self.rasp_parse(group, txt_dir)
-        return "\n".join(_rasp)
+        result = "\n".join(_rasp)
+        self.logger.debug(f"Длина итогового текста расписания для группы {group}: {len(result)} символов")
+        return result
 
 
     @staticmethod
@@ -291,6 +373,7 @@ class Rasp:
         sec_head_text = ''
         _sec_rasp_text = ''
         if sec_group is not None:
+            self.logger.debug(f"Добавление второго расписания для группы {sec_group}")
             sec_head_text = self.gen_head_text(sec_group, mode='None', rasp_mode="sec")
             _sec_rasp_text += await self.get_rasp(sec_group, _get_new)
         
@@ -316,57 +399,87 @@ class Rasp:
              types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True)}"), 
              types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False)}")]
         ]
+        self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
 
 class CheckRasp(Rasp):
     def __init__(self, date: str = None, is_teacher: bool = False) -> None:
         self.is_teacher = is_teacher
-        self.logger = create_logger("CheckRasp", level="DEBUG")
+        self.logger = create_logger("CheckRasp", level=logging.DEBUG)
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
-        self.logger.debug(f"Инициализация CheckRasp с датой: {self.date}")
+        self.logger.info(f"Инициализация CheckRasp с датой: {self.date}")
         self.db = DB()
+        # Дедупликация отправок
+        self._sent_users: set[int] = set()
+        self._broadcast_sent: bool = False
         super().__init__(self.date, self.is_teacher)
 
     
     async def send_rasp(self, user: list, date: str, group: int, mode: Literal['new-rasp', 'rasp-change'], rasp_text: str = None):
         self.logger.info(f"Отправка расписания для пользователя: {user} и даты: {date}")
-        if rasp_text is None: rasp_text = await self.get_rasp(group, _get_new=False, check_diff=False)
+        if rasp_text is None:
+            self.logger.debug(f"Формирование текста для отправки (lazy fetch), группа {group}, mode={mode}")
+            rasp_text = await self.get_rasp(group, _get_new=False, check_diff=False)
+        # Проверка наличия контента для отправки
+        if not rasp_text or rasp_text.strip() == '' or rasp_text.strip() == 'Расписания нету!':
+            self.logger.warning(f"Отправка пропущена: нет содержимого расписания для группы {group} (mode={mode}). Причина: пустой текст или 'Расписания нету!'")
+            return False
+        preview = (rasp_text[:120] + '…') if len(rasp_text) > 120 else rasp_text
+        self.logger.debug(f"Подготовлен текст для отправки (mode={mode}, группа={group}). Превью: {preview}")
         text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
         try: 
             msg = await bot.send_message(
                 chat_id=user,
                 text=text
             )
-            self.logger.debug(f"Расписание успешно отправлено в {user}, номер группы: {group}")
+            self.logger.info(f"Расписание успешно отправлено в {user}, номер группы: {group}")
             return True
         except Exception as e:
-            self.logger.debug(f"Произошла ошибка при отправке расписания в {user}, номер группы: {group}. e={str(e)}")
+            self.logger.error(f"Произошла ошибка при отправке расписания в {user}, номер группы: {group}. e={str(e)}")
             if str(e) == "Telegram server says - Forbidden: bot was blocked by the user":
                 db = DB()
                 await db.delete(user_id=user)
+                self.logger.warning(f"Пользователь {user} заблокировал бота. Удалён из базы.")
                 return "bot_blocked"
             elif str(e) == "Telegram server says - Bad Request: not enough rights to manage pinned messages in the chat":
                 await msg.reply("❌ Не удалось закрепить новое расписание\n\n🔧 Для закрепления сообщений назначьте меня администратором с правами:\n• Закрепление сообщений\n• Удаление сообщений")
+                self.logger.warning(f"Недостаточно прав для закрепления сообщения у пользователя {user}")
                 return True
             else:
                 return False
     
     def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change']):
+        if SEND_RASP == "0":
+            self.logger.warning("Рассылка отключена (SEND_RASP=0). Задачи не будут сформированы.")
+            return []
         groups = self.db.get_all_usersWgroup()
         tasks = []
         for group, users in groups.items():
             if users != []:
                 for user in users:
+                    if user in self._sent_users:
+                        self.logger.debug(f"Пропуск дубликата: пользователь {user} уже в очереди отправки")
+                        continue
+                    self._sent_users.add(user)
                     tasks.append(self.send_rasp(user, self.date, group, mode))
+        self.logger.debug(f"Создано задач на отправку: {len(tasks)}")
         return tasks
 
     def _create_tasks_change(self, mode: Literal['new-rasp', 'rasp-change'], groups: dict = {}, rasp_text: str = None):
+        if SEND_RASP == "0":
+            self.logger.warning("Рассылка отключена (SEND_RASP=0). Задачи не будут сформированы.")
+            return []
         tasks = []
         for group, users in groups.items():
             if users != []:
                 for user in users:
+                    if user in self._sent_users:
+                        self.logger.debug(f"Пропуск дубликата: пользователь {user} уже в очереди отправки (изменения)")
+                        continue
+                    self._sent_users.add(user)
                     tasks.append(self.send_rasp(user, self.date, group, mode, rasp_text))
+        self.logger.debug(f"Создано задач на отправку (изменения): {len(tasks)}")
         return tasks
 
     async def send_rasp_test(self):
@@ -379,15 +492,17 @@ class CheckRasp(Rasp):
             if self.rasp_exists:
                 if os.path.exists(self.base_txt_dir):
                     #TODO: Тут проверка изменилось ли
+                    self.logger.debug("Базовая директория TXT существует, продолжаю цикл без отправки")
                     continue
                 else:
                     tasks = self._create_tasks(mode="new-rasp")
+                    self.logger.info("Директория с TXT не найдена — рассылаю новое расписание")
                     await asyncio.gather(*tasks)
                     
 
 
 async def main():
-    checkrasp = CheckRasp("31_10_2024")
+    checkrasp = CheckRasp("01_09_2025")
     await checkrasp.send_rasp_test()
 
 

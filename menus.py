@@ -7,7 +7,7 @@ from state import States
 from datetime import datetime
 
 from utils.utils import format_and_return_columns
-logger = create_logger(__name__, level="DEBUG")
+logger = create_logger(__name__)
 
 async def rasp(user_id: int, date: str = None, _get_new: bool = False):
     group, sec_group = DB().get_user_groups(user_id)

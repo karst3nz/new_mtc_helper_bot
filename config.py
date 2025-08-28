@@ -29,6 +29,7 @@ config = read_config['config'] # Словарь с данными из config.in
 BOT_TOKEN = config["bot_token"] if config["bot_token"] is not None else logger.error("Empty parameter for bot_token")
 DEBUG = config["DEBUG"] if config["DEBUG"] is not None else logger.error("Empty parameter for DEBUG, using False"); DEBUG=False
 ADMIN_ID = config["admin_id"] if config["admin_id"] is not None else logger.error("Empty parameter for admin_id")
+SEND_RASP = config["send_rasp"] if config["send_rasp"] is not None else logger.error("Empty parameter for send_rasp")
 
 groups = [
         "3191", "3395", "3195", "3196", "3391", "3393", "3491", "1195",
