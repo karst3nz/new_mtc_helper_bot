@@ -14,7 +14,7 @@ from config import *
 class Rasp:
     def __init__(self, date: str = None, is_teacher: bool = False) -> None:
         self.is_teacher = is_teacher
-        self.logger = create_logger("Rasp", level=logging.INFO)
+        self.logger = create_logger("Rasp")
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
         self.logger.info(f"Инициализация Rasp с датой: {self.date}")
         self.dateWyear = self.date.split('_')[:2][0] + "_" + self.date.split('_')[:2][1]
@@ -406,7 +406,7 @@ class Rasp:
 class CheckRasp(Rasp):
     def __init__(self, date: str = None, is_teacher: bool = False) -> None:
         self.is_teacher = is_teacher
-        self.logger = create_logger("CheckRasp", level=logging.DEBUG)
+        self.logger = create_logger("CheckRasp")
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
         self.logger.info(f"Инициализация CheckRasp с датой: {self.date}")
         self.db = DB()
