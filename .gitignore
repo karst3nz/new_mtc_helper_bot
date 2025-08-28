@@ -9,3 +9,4 @@ __pycache__/
 database/
 *.db
 test.py
+database/db.db
