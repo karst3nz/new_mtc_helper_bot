@@ -1,8 +1,8 @@
 from config import *
 
-from db import DB
-from log import create_logger
-from menus import start
+from utils.db import DB
+from utils.log import create_logger
+from utils.menus import start
 from utils.decorators import check_group, if_admin
 logger = create_logger(__name__)
 

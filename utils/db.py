@@ -2,7 +2,7 @@ import asyncio
 import sqlite3
 from aiogram import types
 import os
-from log import logging
+from utils.log import logging
 
 
 

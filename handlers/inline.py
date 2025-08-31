@@ -1,9 +1,9 @@
 from re import T
 import aiogram.exceptions
 from config import *
-from log import create_logger
+from utils.log import create_logger
 from typing import Callable
-from menus import *
+from utils.menus import *
 import ast
 logger = create_logger(__name__)
 

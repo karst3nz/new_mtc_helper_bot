@@ -79,9 +79,7 @@
 # asyncio.run(_())
 
 
-from pprint import pp
-from db import DB
-
-db = DB()
-user = db.get_user_dataclass(user_id="123")
-pp(user)
+import os
+from pathlib import Path
+path = Path(os.path.abspath(os.path.dirname(__file__)), "app.log")
+print(path)

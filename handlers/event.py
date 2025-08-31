@@ -1,5 +1,5 @@
 from config import *
-from db import DB
+from utils.db import DB
 
 @dp.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=IS_NOT_MEMBER >> MEMBER))
 async def bot_added_as_member(event: ChatMemberUpdated, state: FSMContext):

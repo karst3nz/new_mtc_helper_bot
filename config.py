@@ -1,7 +1,7 @@
 import configparser
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from log import create_logger
+from utils.log import create_logger
 import aiogram
 from aiogram.filters import CommandStart, Command
 from typing import List
@@ -9,7 +9,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 import asyncio
 from aiogram import types
-from state import States
+from utils.state import States
 from aiogram.filters.chat_member_updated import \
     ChatMemberUpdatedFilter, IS_NOT_MEMBER, MEMBER, ADMINISTRATOR
 from aiogram.types import ChatMemberUpdated
@@ -43,11 +43,4 @@ groups = [
         "5111"
     ]
 
-
-# Проверка на правильность токена бота
-try:
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(
-        parse_mode=ParseMode.HTML
-    ))
-except aiogram.utils.token.TokenValidationError:
-    logger.critical("Bot token are empty or invalid")
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))

@@ -1,9 +1,9 @@
 import sys
 from threading import Thread
 from config import *
-from db import DB
-from handlers import msg, inline, cmd, state, event
-from log import create_logger
+from utils.db import DB
+from handlers import msg, inline, cmd, event
+from utils.log import create_logger
 
 
 def start_bot():

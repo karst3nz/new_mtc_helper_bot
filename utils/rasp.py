@@ -6,8 +6,8 @@ from typing import Literal
 import asyncio
 import aiohttp
 from aspose.cells import Workbook
-from db import DB
-from log import create_logger
+from utils.db import DB
+from utils.log import create_logger
 from config import *
 
 

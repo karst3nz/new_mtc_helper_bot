@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from colorama import Fore, Style, init
 
 init(autoreset=True)
@@ -74,8 +75,9 @@ def create_logger(name: str = __name__, level: int = logging.INFO) -> logging.Lo
 
     console = logging.StreamHandler()
     console.setFormatter(ColorFormatter(fmt, datefmt=datefmt))
-
-    file_ = logging.FileHandler("app.log", encoding="windows-1251")
+    import os
+    path = Path(os.path.abspath(os.path.dirname(__file__)).replace("/utils", "/"), "app.log")
+    file_ = logging.FileHandler(path, encoding="windows-1251")
     file_.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
 
     root = logging.getLogger()
