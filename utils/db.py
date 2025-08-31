@@ -223,7 +223,7 @@ class DB:
     def get_user_dataclass(self, user_id: int):
         from utils.dataclasses_ import User
         if self.is_exists(user_id):
-            r = self.cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode FROM users WHERE user_id = ?", (user_id,)).fetchone()
             user = User(*r)   
             return user
         else:
