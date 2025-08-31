@@ -1,3 +1,4 @@
+import re
 import config
 from utils.decorators import if_admin
 from rasp import Rasp
@@ -10,26 +11,42 @@ from utils.utils import format_and_return_columns
 logger = create_logger(__name__)
 
 async def rasp(user_id: int, date: str = None, _get_new: bool = False):
-    group, sec_group = DB().get_user_groups(user_id)
+    db = DB()
+    group, sec_group = db.get_user_groups(user_id)
     date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
     rasp = Rasp(date)
-    return await rasp.create_rasp_msg(
+    text, btns = await rasp.create_rasp_msg(
         group=group,
         sec_group=sec_group,
         _get_new=_get_new
     )
+    user = db.get_user_dataclass(user_id)
+    if "rasp" in user.show_missed_hours_mode: text += f"\n⏰ У тебя сейчас <b>{user.missed_hours}</b> пропущенных часов."
+    return text, btns
 
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 async def start(user_id: int, state: FSMContext): 
     await state.clear()
-    if DB().is_exists(user_id) is False:
+    db = DB()
+    if db.is_exists(user_id) is False:
         text = "👋 Привет! Я бот для просмотра расписания занятий.\n\n📝 Для начала работы, пожалуйста, отправьте номер вашей группы:"
         await state.set_state(States.first_reg_group)
         return text, types.InlineKeyboardMarkup(inline_keyboard=[[]])
     else:
-        text = "🎓 Главное меню\n\nВыберите нужный раздел:"
+        user = db.get_user_dataclass(user_id)
+        if "start" in (user.show_missed_hours_mode or ""):
+            text = (
+                f"🎓 Главное меню\n"
+                f"⏰ У тебя сейчас <b>{user.missed_hours}</b> пропущенных часов.\n\n"
+                "Выберите нужный раздел:"
+            )
+        else:
+            text = (
+                "🎓 Главное меню\n\n"
+                "Выберите нужный раздел:"
+            )
         btns = [
             [types.InlineKeyboardButton(text="📅 Расписание", callback_data="menu:rasp")],
             [types.InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")]
@@ -66,6 +83,7 @@ async def settings(user_id: int, state: FSMContext):
     btns = [
         [types.InlineKeyboardButton(text="✏️ Изменить основную группу", callback_data="menu:change_main_group")],
         [types.InlineKeyboardButton(text="✏️ Изменить доп. группу" if sec_group is not None else "➕ Добавить доп. группу", callback_data="menu:change_sec_group")],
+        [types.InlineKeyboardButton(text="Отображение пропущенных часов", callback_data="menu:missed_hours_mode")],
         [types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")]
     ]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
@@ -165,11 +183,11 @@ async def database(user_id: int, state: FSMContext):
     reply_markup = types.InlineKeyboardMarkup(inline_keyboard=db_info_buttons)
     return final_text, reply_markup
 
-@if_admin("user_id")
-async def db_group(user_id: int, state: FSMContext):
-    await state.clear()
-    await state.set_state(States.db_group_info)
-    return 'group_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
+# @if_admin("user_id")
+# async def db_group(user_id: int, state: FSMContext):
+#     await state.clear()
+#     await state.set_state(States.db_group_info)
+#     return 'group_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
 
 
 @if_admin("user_id")
@@ -184,3 +202,64 @@ async def ad(user_id: int, state: FSMContext):
     await state.clear()
     await state.set_state(States.ad_msg)
     return "Отправь текст", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="Отмена", callback_data="menu:admin")]])
+
+
+async def add_missing_hours(user_id: int, state: FSMContext):
+    await state.clear()
+    db = DB()
+    user = db.get_user_dataclass(user_id)
+    text = (
+        f"⏰ У тебя сейчас пропущенно {user.missed_hours}ч.\n\n"
+        "✍️ Отправь, сколько часов ты уже пропустил. Я их прибавлю к текущим"
+    )
+    btns = [
+        [types.InlineKeyboardButton(text="🗑️ Очистить", callback_data="menu:clear_missing_hours")],
+        [types.InlineKeyboardButton(text="❌ Отменить", callback_data="delete_msg")]
+    ]
+    await state.set_state(States.add_missing_hours)
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def clear_missing_hours(user_id: int, state: FSMContext):
+    await state.clear()
+    db = DB()
+    user = db.get_user_dataclass(user_id)
+    prev = user.missed_hours
+    btns = [
+        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+    ]
+    try:
+        db.cursor.execute("UPDATE users SET missed_hours = 0 WHERE user_id = ?", (user_id,))
+        db.conn.commit()
+        text = f"✅ Пропущенные часы успешно очищены!\nЗначение до очистки: <b>{prev}</b>"
+    except Exception as e:
+        text = f"❌ Произошла ошибка при очистке пропущенных часов: {e}"
+    finally:
+        return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def missed_hours_mode(user_id: int, mode: str = None):
+    db = DB()
+    if mode is not None and isinstance(mode, FSMContext) is False:
+        db.update_hours_mode(user_id, mode)
+    user = db.get_user_dataclass(user_id)
+    show_missed_hours_mode = user.show_missed_hours_mode
+    btns = [
+        [types.InlineKeyboardButton(
+            text="Главное меню" + (" ❌" if show_missed_hours_mode is None or 'start' not in show_missed_hours_mode else " ✅️"),
+            callback_data="menu:missed_hours_mode?('start')"
+        )],
+        [types.InlineKeyboardButton(
+            text="Просмотр расписания" + (" ❌" if show_missed_hours_mode is None or 'rasp' not in show_missed_hours_mode else " ✅️"),
+            callback_data="menu:missed_hours_mode?('rasp')"
+        )],
+        [types.InlineKeyboardButton(
+            text="Новое расписание" + (" ❌" if show_missed_hours_mode is None or 'newRasp' not in show_missed_hours_mode else " ✅️"),
+            callback_data="menu:missed_hours_mode?('newRasp')"
+        )],
+        [types.InlineKeyboardButton(
+            text="Назад",
+            callback_data="menu:settings"
+        )]
+    ]
+    return "Показ пропущенных часов", types.InlineKeyboardMarkup(inline_keyboard=btns)

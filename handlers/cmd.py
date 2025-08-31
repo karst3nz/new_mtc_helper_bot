@@ -41,6 +41,18 @@ async def rasp(msg: types.Message, state: FSMContext):
     )
 
 
+@dp.message(Command("hours"))
+@check_chat_type("private")
+async def hours(msg: types.Message, state: FSMContext):
+    await state.clear()
+    text, btns = await menus.add_missing_hours(msg.from_user.id, state)
+    await msg.answer(
+        text=text,
+        reply_markup=btns
+    )
+
+
+
 @dp.message(Command("admin"))
 @if_admin("msg")
 async def admin(msg: types.Message, state: FSMContext):

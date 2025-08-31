@@ -181,12 +181,28 @@ class DB:
         except Exception as e:
             self.logger.error(e)
 
+    def get_user_dataclass(self, user_id: int):
+        from utils.dataclasses_ import User
+        r = self.cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        user = User(*r)   
+        return user
+
+    def update_hours_mode(self, user_id: int, mode: str):
+        cur_mode = self.get_user_dataclass(user_id).show_missed_hours_mode
+        if cur_mode is not None:
+            if mode in cur_mode: 
+                cur_mode = cur_mode.replace(mode, "")
+            else: 
+                cur_mode += f"{mode}"
+        else:
+            cur_mode = f"{mode}"
+        self.update(user_id=user_id, column="show_missed_hours_mode", new_data=cur_mode, table=self.users_table)
+        self.conn.commit()
+        
     def return_user_data(self, user_id: int):
         if self.is_exists(user_id) is False: return f"Пользователь <b>{user_id}</b> не найден в базе!"
         try:
-            from utils.dataclasses_ import User
-            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode FROM users WHERE user_id = ?", (user_id,)).fetchone()
-            user = User(*r)
+            user = self.get_user_dataclass(user_id)
             text = (
                 f"Информация о пользователе:\n"
                 f"- DB_ID: {user.id}\n"

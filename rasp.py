@@ -378,13 +378,20 @@ class Rasp:
             _sec_rasp_text += await self.get_rasp(sec_group, _get_new)
         
         head_text = self.gen_head_text(group, mode='None', rasp_mode="main")
-        text = f"""
+        if sec_head_text != '' and _sec_rasp_text != '':
+            text = f"""
 {head_text}
 
 {_rasp_text}
 {sec_head_text}
 
 {_sec_rasp_text}
+"""
+        else:
+            text = f"""
+{head_text}
+
+{_rasp_text}
 """
         dateObj = datetime.strptime(self.date, "%d_%m_%Y").date()        
         back_btn = (dateObj - timedelta(days=1)).strftime("%d_%m_%Y")
@@ -417,6 +424,7 @@ class CheckRasp(Rasp):
 
     
     async def send_rasp(self, user: list, date: str, group: int, mode: Literal['new-rasp', 'rasp-change'], rasp_text: str = None):
+        db = DB()
         self.logger.info(f"Отправка расписания для пользователя: {user} и даты: {date}")
         if rasp_text is None:
             self.logger.debug(f"Формирование текста для отправки (lazy fetch), группа {group}, mode={mode}")
@@ -428,6 +436,9 @@ class CheckRasp(Rasp):
         preview = (rasp_text[:120] + '…') if len(rasp_text) > 120 else rasp_text
         self.logger.debug(f"Подготовлен текст для отправки (mode={mode}, группа={group}). Превью: {preview}")
         text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
+        userDC = db.get_user_dataclass(user)
+        if "newRasp" in userDC.show_missed_hours_mode:
+            text += f"\n\n⏰ У тебя сейчас <b>{userDC.missed_hours}</b> пропущенных часов."
         try: 
             msg = await bot.send_message(
                 chat_id=user,
@@ -438,7 +449,6 @@ class CheckRasp(Rasp):
         except Exception as e:
             self.logger.error(f"Произошла ошибка при отправке расписания в {user}, номер группы: {group}. e={str(e)}")
             if str(e) == "Telegram server says - Forbidden: bot was blocked by the user":
-                db = DB()
                 await db.delete(user_id=user)
                 self.logger.warning(f"Пользователь {user} заблокировал бота. Удалён из базы.")
                 return "bot_blocked"

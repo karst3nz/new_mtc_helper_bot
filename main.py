@@ -14,10 +14,11 @@ def cmds():
     asyncio.create_task(bot.set_my_commands([
         types.BotCommand(command="/start", description="🎓 Главное меню"),
         types.BotCommand(command="/settings", description="⚙️ Настройки"),
+        types.BotCommand(command="/hours", description="⏰ Пропущенные часы"),
     ]))
 
 def create_dirs():
-    dirs = ["logs", "data", "data/txt", "data/htm", "db", "data/teach_txt", 'data/old_txt']
+    dirs = ["data", "data/txt", "database", 'data/old_txt']
     import os
     for dir in dirs:
         os.makedirs(dir, exist_ok=True)

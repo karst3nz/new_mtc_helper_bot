@@ -14,3 +14,4 @@ class States(StatesGroup):
     db_user_info = State()
     ad_msg = State()
     ad_confirm = State()
+    add_missing_hours = State()

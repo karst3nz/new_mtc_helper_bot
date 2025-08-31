@@ -97,4 +97,15 @@ async def ad_msg(msg: types.Message, state: FSMContext):
 
 
 
+@dp.message(States.add_missing_hours)
+async def add_missing_hours(msg: types.Message, state: FSMContext):
+    await state.clear()
+    db = DB()
+    db.cursor.execute(f"UPDATE users SET missed_hours = missed_hours + ? WHERE user_id = ?", (msg.text, msg.from_user.id)).connection.commit()
+    user = db.get_user_dataclass(msg.from_user.id)
+    btns = [
+        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+    ]
+    text = f"✅ Готово!\n\n⏰ Теперь у тебя пропущено {user.missed_hours}ч."
+    await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
 

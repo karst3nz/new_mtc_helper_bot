@@ -53,6 +53,13 @@ async def ad1(call: types.CallbackQuery, state: FSMContext):
         except Exception as e:
             logger.warning(f"Ошибка при удалении сообщений: {e}")
 
+@dp.callback_query(F.data == "delete_msg")
+async def delete_msg(call: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
+    await call.answer()
+
+
 @dp.callback_query(F.data == F.data)
 async def inline_handler(call: types.CallbackQuery, state: FSMContext):
     logger.info(
