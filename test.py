@@ -83,5 +83,5 @@ from pprint import pp
 from db import DB
 
 db = DB()
-user = db.get_user_dataclass(user_id="1823563959")
+user = db.get_user_dataclass(user_id="123")
 pp(user)

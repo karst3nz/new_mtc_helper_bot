@@ -263,3 +263,29 @@ async def missed_hours_mode(user_id: int, mode: str = None):
         )]
     ]
     return "Показ пропущенных часов", types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def group_settings(user_id: int, state: FSMContext):
+    btns = [
+        [types.InlineKeyboardButton(text="✏️ Изменить группу", callback_data="menu:change_GROUP_group")], # по другому не придумал xD
+        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+    ]
+    return "Настройки", types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def change_GROUP_group(id: int, state: FSMContext):
+    db = DB()
+    try:
+        group = db.cursor.execute('SELECT "group" FROM groups WHERE id = ?', (id,)).fetchone()[0]
+    except Exception:
+        return "Не удалось найти вашу группу в базе, попробуйте передобавить бота", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]])
+    text = f"""
+✏️ Изменение группы
+
+📋 Текущая группа: {group}
+
+📝 Отправьте новый номер группы:
+        """
+    await state.set_state(States.GROUP_change_group)
+    await state.update_data(id=id)
+    return text, types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]]) 

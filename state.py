@@ -15,3 +15,5 @@ class States(StatesGroup):
     ad_msg = State()
     ad_confirm = State()
     add_missing_hours = State()
+    GROUP_reg_group = State()
+    GROUP_change_group = State()

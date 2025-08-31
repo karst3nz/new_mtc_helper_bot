@@ -39,7 +39,17 @@ class DB:
             )
         ''')
         self.conn.commit()
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS groups (
+                id          INTEGER,
+                user_id     INTEGER NOT NULL,
+                "group"     INTEGER NOT NULL
+            )
+        ''')
     
+        self.conn.commit()
+
     def insert(self, user_id: int, tg_username: str, group_id: int, sec_group_id: int):
         """
         Вставка пользователя в основную БД после подтверждения
@@ -65,6 +75,18 @@ class DB:
         ]
         asyncio.create_task(bot.send_message(chat_id=user_id, text=user_text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=user_btns)))
         asyncio.create_task(bot.send_message(chat_id=ADMIN_ID, text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns)))
+
+    def insert_group(self, id: int, user_id: int, group: int):
+        if self.is_group_exists(id) is False:
+            self.cursor.execute(
+                'INSERT INTO groups (id, user_id, "group")'
+                'VALUES (?, ?, ?)',
+                (id, user_id, group))
+            self.conn.commit()
+
+    def is_group_exists(self, id: int):
+        self.cursor.execute(f"SELECT id FROM groups WHERE id = ?", (id,))
+        return False if self.cursor.fetchone() is None else True
 
     def is_exists(self, user_id: int):
         return False if self.get(user_id=user_id, data="user_id", table=DB.users_table) is None else True
@@ -118,9 +140,26 @@ class DB:
             _dict[group] = user_ids
         return _dict
 
+    
+    def get_all_TGgroupsWgroup(self) -> dict:
+        _dict = {}
+        from config import groups
+        for group in groups:
+            self.cursor.execute("SELECT id FROM groups WHERE \"group\" = ?", (group,))
+            user_ids = [user_id[0] for user_id in self.cursor.fetchall()]
+            _dict[group] = user_ids
+        return _dict
+
     def get_all_usersBYgroup(self, group) -> dict:
         _dict = {}
         self.cursor.execute("SELECT user_id FROM users WHERE group_id = ?", (group,))
+        user_ids = [user_id[0] for user_id in self.cursor.fetchall()]
+        _dict[group] = user_ids
+        return _dict        
+
+    def get_all_TGgroupsBYgroup(self, group) -> dict:
+        _dict = {}
+        self.cursor.execute("SELECT id FROM groups WHERE \"group\" = ?", (group,))
         user_ids = [user_id[0] for user_id in self.cursor.fetchall()]
         _dict[group] = user_ids
         return _dict        
@@ -183,10 +222,13 @@ class DB:
 
     def get_user_dataclass(self, user_id: int):
         from utils.dataclasses_ import User
-        r = self.cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
-        user = User(*r)   
-        return user
-
+        if self.is_exists(user_id):
+            r = self.cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            user = User(*r)   
+            return user
+        else:
+            return User(None, None, None, None, None, None, None)
+            
     def update_hours_mode(self, user_id: int, mode: str):
         cur_mode = self.get_user_dataclass(user_id).show_missed_hours_mode
         if cur_mode is not None:

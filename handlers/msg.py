@@ -109,3 +109,32 @@ async def add_missing_hours(msg: types.Message, state: FSMContext):
     text = f"✅ Готово!\n\n⏰ Теперь у тебя пропущено {user.missed_hours}ч."
     await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
 
+
+
+@dp.message(States.GROUP_reg_group)
+@check_group()
+async def GROUP_reg_group(msg: types.Message, state: FSMContext):
+    state_data = await state.get_data()
+    id = state_data["id"]
+    user_id = state_data["user_id"]
+    db = DB()
+    db.insert_group(id, user_id, msg.text)
+    btns = [
+        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+    ]
+    await msg.reply(f"✅ Группа <b>{msg.text}</b> успешно установлена!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
+    await state.clear()
+
+
+@dp.message(States.GROUP_change_group)
+@check_group()
+async def GROUP_change_group(msg: types.Message, state: FSMContext):
+    state_data = await state.get_data()
+    id = state_data["id"]
+    db = DB()
+    db.cursor.execute(f'UPDATE groups SET "group" = ? WHERE id = ?', (msg.text, id)).connection.commit()
+    btns = [
+        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+    ]
+    await msg.reply(f"✅ Группа <b>{msg.text}</b> успешно установлена!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
+    await state.clear()

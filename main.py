@@ -2,7 +2,7 @@ import sys
 from threading import Thread
 from config import *
 from db import DB
-from handlers import msg, inline, cmd, state
+from handlers import msg, inline, cmd, state, event
 from log import create_logger
 
 
@@ -42,6 +42,7 @@ async def __init__():
             print("OK")
         except Exception as e:
             print(f"ERROR ({e})")
+            quit(1)
     else:
         while True:
             await asyncio.sleep(1)

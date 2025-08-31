@@ -103,11 +103,11 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
     else:
         # Пробуем разные варианты сигнатур
         try:
-            text, btns = await menu(call.from_user.id, *args, state)
+            text, btns = await menu(call.message.chat.id, *args, state)
         except Exception as e:
             # logger.error(e)
             try:
-                text, btns = await menu(call.from_user.id, *args)
+                text, btns = await menu(call.message.chat.id, *args)
             except Exception as e:
                 # logger.error(e)
                 try:
@@ -115,7 +115,7 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
                 except Exception as e:
                     # logger.error(e)
                     try:
-                        text, btns = await menu(call.from_user.id, state)
+                        text, btns = await menu(call.message.chat.id, state)
                     except Exception as e:
                         logger.error(e)
                         text = "❌ Не удалось загрузить меню"

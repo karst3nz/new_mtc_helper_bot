@@ -157,19 +157,12 @@ class Rasp:
                 diff, status = self.compare_texts(old_text, new_text)
                 self.logger.debug(f"Группа {group}: изменения обнаружены={status}")
                 if status is True:
-                    # # Причина выбора режима отправки
-                    # if "<s>Расписания нету!</s>" in diff:
-                    #     if not checkrasp._broadcast_sent:
-                    #         self.logger.info(f"Группа {group}: новое расписание (причина: исчезла строка 'Расписания нету!'). Запускаю одноразовую рассылку new-rasp")
-                    #         tasks = checkrasp._create_tasks(mode="new-rasp")
-                    #         checkrasp._broadcast_sent = True
-                    #         await asyncio.gather(*tasks)
-                    #     else:
-                    #         self.logger.debug("Одноразовая рассылка new-rasp уже выполнена в этом проходе — пропускаю")
-                    # else:
                     self.logger.info(f"Группа {group}: изменение расписания (причина: найден diff). Длина diff: {len(diff)} символов")
                     groups = db.get_all_usersBYgroup(group)
+                    tg_groups = db.get_all_TGgroupsBYgroup(group)
                     tasks = checkrasp._create_tasks_change(mode="rasp-change", groups=groups, rasp_text=diff)
+                    await asyncio.gather(*tasks)
+                    tasks = checkrasp._create_tasks_change(mode="rasp-change", groups=tg_groups, rasp_text=diff)
                     await asyncio.gather(*tasks)
             except Exception as e:
                 self.logger.error(f"Ошибка при проверке изменений для группы {group}: {e}")
@@ -202,11 +195,26 @@ class Rasp:
                 workbook.save(self.txt_dir)
                 workbook.save(self.old_txt_dir)
                 checkrasp = CheckRasp(self.date, self.is_teacher)
+                db = DB()
                 if not checkrasp._broadcast_sent:
                     self.logger.info(f"Новое расписание (причина: записан файл {self.txt_dir}). Запускаю одноразовую рассылку new-rasp")
-                    tasks = checkrasp._create_tasks(mode="new-rasp")
-                    checkrasp._broadcast_sent = True
-                    await asyncio.gather(*tasks)
+                    checkrasp._broadcast_sent = False
+                    
+                    user_groups = db.get_all_usersWgroup()
+                    if user_groups:
+                        tasks = checkrasp._create_tasks(mode="new-rasp", groups=user_groups)
+                        if tasks:
+                            checkrasp._broadcast_sent = True
+                            await asyncio.gather(*tasks)
+                            checkrasp._broadcast_sent = False
+
+                    tg_groups = db.get_all_TGgroupsWgroup()
+                    if tg_groups:
+                        tasks = checkrasp._create_tasks(mode="new-rasp", groups=tg_groups)
+                        if tasks:
+                            checkrasp._broadcast_sent = True
+                            await asyncio.gather(*tasks)
+                            checkrasp._broadcast_sent = False
                 else:
                     self.logger.debug("Одноразовая рассылка new-rasp уже выполнена в этом проходе — пропускаю")
             self.logger.info(f"Файл сохранен как {self.txt_dir}")
@@ -437,7 +445,7 @@ class CheckRasp(Rasp):
         self.logger.debug(f"Подготовлен текст для отправки (mode={mode}, группа={group}). Превью: {preview}")
         text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
         userDC = db.get_user_dataclass(user)
-        if "newRasp" in userDC.show_missed_hours_mode:
+        if "newRasp" in str(userDC.show_missed_hours_mode):
             text += f"\n\n⏰ У тебя сейчас <b>{userDC.missed_hours}</b> пропущенных часов."
         try: 
             msg = await bot.send_message(
@@ -459,11 +467,10 @@ class CheckRasp(Rasp):
             else:
                 return False
     
-    def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change']):
+    def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change'], groups: dict = {}):
         if SEND_RASP == "0":
             self.logger.warning("Рассылка отключена (SEND_RASP=0). Задачи не будут сформированы.")
             return []
-        groups = self.db.get_all_usersWgroup()
         tasks = []
         for group, users in groups.items():
             if users != []:

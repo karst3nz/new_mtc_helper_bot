@@ -19,14 +19,17 @@ async def start(msg: types.Message, state: FSMContext):
 
 
 @dp.message(Command("settings"))
-@check_chat_type("private")
-async def start(msg: types.Message, state: FSMContext):
+async def settings(msg: types.Message, state: FSMContext):
     await state.clear()
-    text, btns = await menus.settings(msg.from_user.id, state)
+    if msg.chat.type == "private":
+        text, btns = await menus.settings(msg.from_user.id, state)
+    elif msg.chat.type in ("group", "supergroup"):
+        text, btns = await menus.group_settings(msg.from_user.id, state)
     await msg.answer(
         text=text,
         reply_markup=btns
     )
+
 
 
 @dp.message(Command('rasp'))
