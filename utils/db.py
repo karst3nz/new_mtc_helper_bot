@@ -61,10 +61,6 @@ class DB:
                 (user_id, tg_username, group_id, sec_group_id, 0, None))
             self.conn.commit()
         from config import bot, ADMIN_ID
-        text = f"DB: New user added to db [ui={user_id}; tg_username=@{tg_username}; group_id={group_id}]"
-        btns = [
-            [types.InlineKeyboardButton(text="Профиль", url=f"tg://user?id={user_id}")]
-        ]
         user_text = (
             "🎉 Спасибо, что выбрали моего бота!\n"
             "Если возникнут вопросы или пожелания, пишите — @Karst3nz\n"
@@ -74,7 +70,6 @@ class DB:
             [types.InlineKeyboardButton(text="💬 Связаться с автором", url=f"tg://user?id={ADMIN_ID}")]
         ]
         asyncio.create_task(bot.send_message(chat_id=user_id, text=user_text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=user_btns)))
-        asyncio.create_task(bot.send_message(chat_id=ADMIN_ID, text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns)))
 
     def insert_group(self, id: int, user_id: int, group: int):
         if self.is_group_exists(id) is False:
