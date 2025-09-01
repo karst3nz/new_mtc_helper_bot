@@ -2,11 +2,8 @@
 # Токен вашего Telegram бота (получите у @BotFather)
 bot_token = YOUR_BOT_TOKEN_HERE
 
-# Режим отладки (True/False)
-DEBUG = False
-
 # ID администратора бота (ваш Telegram ID)
 admin_id = YOUR_ADMIN_ID_HERE
 
-# Настройка отправки расписания (True/False)
-send_rasp = True 
+# Настройка отправки расписания (1/0)
+send_rasp = 1
