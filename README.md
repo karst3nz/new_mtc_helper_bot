@@ -33,7 +33,7 @@ Telegram бот-помощник для студентов МГТЭК, пред�
 
 1. **Клонируйте репозиторий:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/karst3nz/new_mtc_helper_bot
    cd new_mtc_helper_bot
    ```
 
