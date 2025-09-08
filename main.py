@@ -4,6 +4,8 @@ from config import *
 from utils.db import DB
 from handlers import msg, inline, cmd, event
 from utils.log import create_logger
+from utils import check_groups, delete_users
+
 
 
 def start_bot():
@@ -29,6 +31,8 @@ async def __init__():
         {"name": "создание нужных директорий", "func": create_dirs},
         {"name": "логирование", "func": create_logger, "args": __name__},
         {"name": "БД", "func": DB},
+        {"name": "проверку групп в конфиге", "func": check_groups.run},
+        {"name": "удаление пользователей с неиспользуемыми ботом группами", "func": delete_users.run},
         {"name": "бота", "func": start_bot},
         {"name": "установку команд", "func": cmds}
     ]
