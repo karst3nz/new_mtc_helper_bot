@@ -4,8 +4,8 @@ from typing import List, Set
 import ast
 
 
-DATA_DIR = "/home/karst3nz/PycharmProjects/new_mtc_helper_bot/data"
-CONFIG_PY_PATH = "/home/karst3nz/PycharmProjects/new_mtc_helper_bot/config.py"
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+CONFIG_PY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.py")
 GROUP_PATTERN = re.compile(r"\¦(\d{4})\¦")
 
 
