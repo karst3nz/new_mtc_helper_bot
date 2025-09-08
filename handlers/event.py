@@ -9,8 +9,8 @@ async def bot_added_as_member(event: ChatMemberUpdated, state: FSMContext):
         if chat_info.permissions.can_send_messages:
             creator = f"<a href='tg://user?id={event.from_user.id}'>{event.from_user.full_name}</a>"
             await event.answer(
-                text=f"Привет! Вижу, что вы добавили меня в вашу группу.\n" +
-                     f'Теперь пришлите мне ваш номер группы ответом на это сообщение\n' +
+                text=f"Привет! 👋 Вижу, что вы добавили меня в вашу группу.\n" +
+                     f'Теперь пришлите мне ваш номер группы ответом на это сообщение ✍️\n' +
                      f'(Настраивать может только {creator})',
                     disable_web_page_preview=True 
             )
@@ -25,7 +25,7 @@ async def bot_added_as_member(event: ChatMemberUpdated, state: FSMContext):
     else:
         group = db.cursor.execute(f"SELECT \"group\" FROM groups WHERE id = ?", (event.chat.id,)).fetchone()
         await event.answer(
-            text=f"Привет! Кажется, я уже был в этой беседе.\n"
+            text=f"Привет! 👋 Кажется, я уже был в этой беседе.\n"
                  f"Ваш номер группы {group[0]}?\n"
                  f"Если это не так, измените в настройках"
         )
@@ -47,7 +47,7 @@ async def bot_kicked_from_group(event: ChatMemberUpdated, state: FSMContext):
 
 async def bot_added_as_admin_and_leave(event: ChatMemberUpdated):
     if event.chat.type != "supergroup":
-        text = "Не добавляйте меня в беседу как Администратора! Это может повлечь за собой потерю всех сообщений."
+        text = "Не добавляйте меня в беседу как Администратора! ⚠️ Это может повлечь за собой потерю всех сообщений."
         await event.answer(text)
         await bot.leave_chat(event.chat.id)
         await bot.send_message(event.from_user.id, text=text)

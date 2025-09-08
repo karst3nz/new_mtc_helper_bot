@@ -44,9 +44,9 @@ async def ad1(call: types.CallbackQuery, state: FSMContext):
         r = await asyncio.gather(*tasks)
         success = r.count(True)
         errors = r.count(False)    
-        await call.message.answer(text=f"success={success}\nerrors={errors}")    
+        await call.message.answer(text=f"Итоги рассылки:\n✅ success={success}\n❌ errors={errors}")    
     else:
-        await call.message.answer("Отменено")
+        await call.message.answer("❌ Отменено")
     if msg2delete is not None:
         try:
             await bot.delete_messages(chat_id=call.from_user.id, message_ids=msg2delete)
@@ -59,6 +59,16 @@ async def delete_msg(call: types.CallbackQuery, state: FSMContext):
     await call.message.delete()
     await call.answer()
 
+
+@dp.callback_query(F.data == "check_pin_rights")
+async def check_pin_rights(call: types.CallbackQuery):
+    await call.answer()
+    try: 
+        await call.message.pin(disable_notification=True)
+        await call.message.unpin()
+        await call.message.edit_text(text='✅ Права выданы верно!', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text='❌ Закрыть', callback_data='delete_msg')]]))
+    except:
+        await call.message.reply("❌ Проверка не удалась, проверьте права бота!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text='❌ Закрыть', callback_data='delete_msg')]]))
 
 @dp.callback_query(F.data == F.data)
 async def inline_handler(call: types.CallbackQuery, state: FSMContext):
@@ -118,7 +128,7 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
                         text, btns = await menu(call.message.chat.id, state)
                     except Exception as e:
                         logger.error(e)
-                        text = "❌ Не удалось загрузить меню"
+                        text = f"❌ Не удалось загрузить меню. Ошибка <code>{str(e)}</code>"
                         btns = types.InlineKeyboardMarkup(
                             inline_keyboard=[[
                                 types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")
@@ -131,6 +141,6 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
         disable_web_page_preview=True,
     )
     except aiogram.exceptions.TelegramBadRequest:
-        await call.answer("Нет изменений...")
+        await call.answer("ℹ️ Нет изменений...")
     finally:
         await call.answer()

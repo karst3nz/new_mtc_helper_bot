@@ -566,7 +566,7 @@ class CheckRasp(Rasp):
         # Формирование текста сообщения
         text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
         userDC = db.get_user_dataclass(user)
-        
+        groupDC = db.get_TGgroup_dataclass(user)
         # Добавление информации о пропущенных часах
         missed_hours_added = False
         if "newRasp" in str(userDC.show_missed_hours_mode):
@@ -583,6 +583,25 @@ class CheckRasp(Rasp):
                 text=text
             )
             self.logger.info(f"[SEND_RASP] Успешная отправка | Пользователь: {user} | Группа: {group} | Режим: {mode} | Длина сообщения: {final_length} символов | ID сообщения: {msg.message_id}")
+            if bool(groupDC.pin_new_rasp) == True: # даже если groupDC.pin_new_rasp == None выведет False, bool(None) == False
+                self.logger.info(f"[SEND_RASP] Закрепление отправленного сообщения в чате | Пользователь: {user} | Группа: {group} | ID сообщения: {msg.message_id}")
+                try:
+                    await bot.pin_chat_message(
+                        chat_id=user,
+                        message_id=msg.message_id
+                    )
+                    self.logger.info(f"[SEND_RASP] Успешно закрепил отправленное сообщение в чате | Пользователь: {user} | Группа: {group} | ID сообщения: {msg.message_id}")
+                except Exception as e:
+                    error_msg = str(e)
+                    if error_msg == "Telegram server says - Bad Request: not enough rights to manage pinned messages in the chat":
+                        btns = [
+                            [types.InlineKeyboardButton(text="Проверить права", callback_data="check_pin_rights")]
+                        ]
+                        await msg.reply("❌ Не удалось закрепить новое расписание\n\n🔧 Для закрепления сообщений назначьте меня администратором с правами:\n• Закрепление сообщений\n• Удаление сообщений", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
+                        self.logger.warning(f"[SEND_RASP] Недостаточно прав для закрепления | Пользователь: {user} | Группа: {group}")
+                    else:
+                        self.logger.error(f"[SEND_RASP] Необработанная ошибка | Пользователь: {user} | Группа: {group} | Режим: {mode} | Тип ошибки: {type(e).__name__} | Сообщение: {error_msg}")
+                        return False            
             return True
             
         except Exception as e:
@@ -594,16 +613,14 @@ class CheckRasp(Rasp):
                 self.logger.warning(f"[SEND_RASP] Пользователь заблокировал бота | Пользователь: {user} | Действие: удален из базы")
                 return "bot_blocked"
                 
-            elif error_msg == "Telegram server says - Bad Request: not enough rights to manage pinned messages in the chat":
-                await msg.reply("❌ Не удалось закрепить новое расписание\n\n🔧 Для закрепления сообщений назначьте меня администратором с правами:\n• Закрепление сообщений\n• Удаление сообщений")
-                self.logger.warning(f"[SEND_RASP] Недостаточно прав для закрепления | Пользователь: {user} | Группа: {group}")
-                return True
-
             elif error_msg == "Telegram server says - Bad Request: chat not found":
+                await db.delete(user_id=user, table=db.users_table)
+                self.logger.warning(f"[SEND_RASP] У бота нету чата с пользователем | Пользователь: {user} | Действие: удален из базы")
                 return False
             else:
                 self.logger.error(f"[SEND_RASP] Необработанная ошибка | Пользователь: {user} | Группа: {group} | Режим: {mode} | Тип ошибки: {type(e).__name__} | Сообщение: {error_msg}")
                 return False
+    
     
     def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change'], groups: dict = {}):
         if SEND_RASP == "0":

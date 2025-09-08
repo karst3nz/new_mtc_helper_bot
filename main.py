@@ -44,11 +44,10 @@ async def __init__():
             print(f"ERROR ({e})")
             quit(1)
     else:
-        while True:
+        while True: # Основной цикл asyncio, все остальное запущено как task
             await asyncio.sleep(1)
 
 
 
 if __name__ == '__main__':
     asyncio.run(__init__())
-    # asyncio.run(start_bot(), debug=False)

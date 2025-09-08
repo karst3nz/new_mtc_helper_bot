@@ -83,7 +83,7 @@ async def settings(user_id: int, state: FSMContext):
     btns = [
         [types.InlineKeyboardButton(text="✏️ Изменить основную группу", callback_data="menu:change_main_group")],
         [types.InlineKeyboardButton(text="✏️ Изменить доп. группу" if sec_group is not None else "➕ Добавить доп. группу", callback_data="menu:change_sec_group")],
-        [types.InlineKeyboardButton(text="Отображение пропущенных часов", callback_data="menu:missed_hours_mode")],
+        [types.InlineKeyboardButton(text="⏰ Отображение пропущенных часов", callback_data="menu:missed_hours_mode")],
         [types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")]
     ]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
@@ -130,12 +130,12 @@ async def delete_sec_group(user_id: int, state: FSMContext):
 
 @if_admin("user_id")
 async def admin(user_id: int, state: FSMContext):
-    text = "ADMIN"
+    text = "🛠️ ADMIN"
     await state.clear()
     btns = [
-        [types.InlineKeyboardButton(text="Рассылка", callback_data="menu:ad")],
-        [types.InlineKeyboardButton(text="База Данных", callback_data="menu:database")],
-        [types.InlineKeyboardButton(text="Ручная отправка расписания", callback_data="menu:send_rasp")],
+        [types.InlineKeyboardButton(text="📢 Рассылка", callback_data="menu:ad")],
+        [types.InlineKeyboardButton(text="🗄️ База Данных", callback_data="menu:database")],
+        [types.InlineKeyboardButton(text="📨 Ручная отправка расписания", callback_data="menu:send_rasp")],
         [types.InlineKeyboardButton(text="< Назад", callback_data="menu:start")]
     ]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
@@ -176,9 +176,9 @@ async def database(user_id: int, state: FSMContext):
     final_text = f"{db_all_users}{border}\n{group_info_start}\n{y}"
 
     db_info_buttons = [
-        [types.InlineKeyboardButton(text="Выгрузить информацию по группе", callback_data="menu:db_group")],
-        [types.InlineKeyboardButton(text="Выгрузить информацию по человеку", callback_data="menu:db_user")],
-        [types.InlineKeyboardButton(text="Назад", callback_data="menu:admin")]
+        [types.InlineKeyboardButton(text="📤 Выгрузить информацию по группе", callback_data="menu:db_group")],
+        [types.InlineKeyboardButton(text="📤 Выгрузить информацию по человеку", callback_data="menu:db_user")],
+        [types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:admin")]
     ]
     reply_markup = types.InlineKeyboardMarkup(inline_keyboard=db_info_buttons)
     return final_text, reply_markup
@@ -194,14 +194,14 @@ async def database(user_id: int, state: FSMContext):
 async def db_user(user_id: int, state: FSMContext):
     await state.clear()
     await state.set_state(States.db_user_info)
-    return 'user_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
+    return '🔎 user_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
 
 
 @if_admin("user_id")
 async def ad(user_id: int, state: FSMContext):
     await state.clear()
     await state.set_state(States.ad_msg)
-    return "Отправь текст", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="Отмена", callback_data="menu:admin")]])
+    return "✉️ Отправь текст", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="Отмена", callback_data="menu:admin")]])
 
 
 async def add_missing_hours(user_id: int, state: FSMContext):
@@ -262,15 +262,23 @@ async def missed_hours_mode(user_id: int, mode: str = None):
             callback_data="menu:settings"
         )]
     ]
-    return "Показ пропущенных часов", types.InlineKeyboardMarkup(inline_keyboard=btns)
+    return "⏰ Показ пропущенных часов", types.InlineKeyboardMarkup(inline_keyboard=btns)
 
 
-async def group_settings(user_id: int, state: FSMContext):
+async def group_settings(id: int, mode: str = None):
+    db = DB()
+    if mode is not None and mode == "pin_new_rasp":
+        condition = bool(db.get_TGgroup_dataclass(id).pin_new_rasp)
+        db.cursor.execute("UPDATE groups SET pin_new_rasp = ? WHERE id = ?", (not bool(condition), id))
+        db.conn.commit()
+        del condition
+    condition = bool(db.get_TGgroup_dataclass(id).pin_new_rasp)
     btns = [
+        [types.InlineKeyboardButton(text=f"{'❌' if condition is False else '✅️'} Закреплять новое расписание", callback_data="menu:group_settings?('pin_new_rasp')")],
         [types.InlineKeyboardButton(text="✏️ Изменить группу", callback_data="menu:change_GROUP_group")], # по другому не придумал xD
         [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
     ]
-    return "Настройки", types.InlineKeyboardMarkup(inline_keyboard=btns)
+    return "⚙️ Настройки", types.InlineKeyboardMarkup(inline_keyboard=btns)
 
 
 async def change_GROUP_group(id: int, state: FSMContext):
@@ -278,7 +286,7 @@ async def change_GROUP_group(id: int, state: FSMContext):
     try:
         group = db.cursor.execute('SELECT "group" FROM groups WHERE id = ?', (id,)).fetchone()[0]
     except Exception:
-        return "Не удалось найти вашу группу в базе, попробуйте передобавить бота", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]])
+        return "❌ Не удалось найти вашу группу в базе, попробуйте передобавить бота", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]])
     text = f"""
 ✏️ Изменение группы
 

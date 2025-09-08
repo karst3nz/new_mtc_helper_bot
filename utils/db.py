@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from typing import Literal
 from aiogram import types
 import os
 from utils.log import logging
@@ -16,11 +17,25 @@ class DB:
             os.mkdir(db_DIR)
         self.conn = sqlite3.connect(db_DIR + "db.db", check_same_thread=False)
         self.cursor = self.conn.cursor()
-        self.run()
         self.users_table = "users"
         self.logger = logging.getLogger("DataBase")
+        self.run()
         
        
+    def insert_column(self, column: str, table: str, type: Literal["TEXT", "INTEGER", "REAL", "BOOL"], default_value = None):
+        self.cursor.execute("PRAGMA table_info({})".format(table))
+        columns_in_table = [column_info[1] for column_info in self.cursor.fetchall()]
+        if column not in columns_in_table:
+            # Создаем столбец, если его нет в таблице
+            self.cursor.execute("ALTER TABLE {} ADD COLUMN {} {}".format(table, column, type))
+            self.cursor.execute(f"UPDATE {table} SET {column} = ?", (default_value,))
+            self.conn.commit()
+            _log_text = f"Столбец {column} был добавлен в таблицу {table} (type={type}, default_value={default_value})"
+            try: self.logger.info(_log_text)
+            except: print(_log_text) # в rare-case когда logging не успел инициализоватся
+        else:
+            return
+
     def run(self):
         """
         Создание таблиц БД
@@ -42,13 +57,16 @@ class DB:
 
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS groups (
-                id          INTEGER,
-                user_id     INTEGER NOT NULL,
-                "group"     INTEGER NOT NULL
+                id              INTEGER,
+                user_id         INTEGER NOT NULL,
+                "group"         INTEGER NOT NULL,
+                pin_new_rasp    TEXT
             )
         ''')
     
         self.conn.commit()
+
+        self.insert_column("pin_new_rasp", "groups", "BOOL", False)
 
     def insert(self, user_id: int, tg_username: str, group_id: int, sec_group_id: int):
         """
@@ -224,6 +242,15 @@ class DB:
         else:
             return User(None, None, None, None, None, None, None)
             
+    def get_TGgroup_dataclass(self, id: int):
+        from utils.dataclasses_ import TGgroup
+        if self.is_group_exists(id):
+            r = self.cursor.execute("SELECT * FROM groups WHERE id = ?", (id,)).fetchone()
+            tggroup = TGgroup(*r)
+            return tggroup
+        else:
+            return TGgroup(None, None, None, None)
+
     def update_hours_mode(self, user_id: int, mode: str):
         cur_mode = self.get_user_dataclass(user_id).show_missed_hours_mode
         if cur_mode is not None:

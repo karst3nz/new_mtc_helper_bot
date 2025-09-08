@@ -10,3 +10,11 @@ class User:
     sec_group_id: int
     missed_hours: int
     show_missed_hours_mode: Optional[str]  # может быть None, если в БД NULL
+
+
+@dataclass
+class TGgroup:
+    id: int
+    user_id: int
+    group: int
+    pin_new_rasp: bool
