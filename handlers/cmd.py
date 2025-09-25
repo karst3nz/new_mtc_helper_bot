@@ -24,7 +24,7 @@ async def settings(msg: types.Message, state: FSMContext):
     if msg.chat.type == "private":
         text, btns = await menus.settings(msg.from_user.id, state)
     elif msg.chat.type in ("group", "supergroup"):
-        text, btns = await menus.group_settings(msg.from_user.id, state)
+        text, btns = await menus.group_settings(msg.chat.id, state)
     await msg.answer(
         text=text,
         reply_markup=btns
