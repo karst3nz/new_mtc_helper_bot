@@ -607,19 +607,20 @@ class CheckRasp(Rasp):
         except Exception as e:
             error_msg = str(e)
             self.logger.error(f"[SEND_RASP] Ошибка отправки | Пользователь: {user} | Группа: {group} | Режим: {mode} | Ошибка: {error_msg}")
+            return False
             
-            if error_msg == "Telegram server says - Forbidden: bot was blocked by the user":
-                await db.delete(user_id=user, table=db.users_table)
-                self.logger.warning(f"[SEND_RASP] Пользователь заблокировал бота | Пользователь: {user} | Действие: удален из базы")
-                return "bot_blocked"
+            # if error_msg == "Telegram server says - Forbidden: bot was blocked by the user":
+            #     await db.delete(user_id=user, table=db.users_table)
+            #     self.logger.warning(f"[SEND_RASP] Пользователь заблокировал бота | Пользователь: {user} | Действие: удален из базы")
+            #     return "bot_blocked"
                 
-            elif error_msg == "Telegram server says - Bad Request: chat not found":
-                await db.delete(user_id=user, table=db.users_table)
-                self.logger.warning(f"[SEND_RASP] У бота нету чата с пользователем | Пользователь: {user} | Действие: удален из базы")
-                return False
-            else:
-                self.logger.error(f"[SEND_RASP] Необработанная ошибка | Пользователь: {user} | Группа: {group} | Режим: {mode} | Тип ошибки: {type(e).__name__} | Сообщение: {error_msg}")
-                return False
+            # elif error_msg == "Telegram server says - Bad Request: chat not found":
+            #     await db.delete(user_id=user, table=db.users_table)
+            #     self.logger.warning(f"[SEND_RASP] У бота нету чата с пользователем | Пользователь: {user} | Действие: удален из базы")
+            #     return False
+            # else:
+            #     self.logger.error(f"[SEND_RASP] Необработанная ошибка | Пользователь: {user} | Группа: {group} | Режим: {mode} | Тип ошибки: {type(e).__name__} | Сообщение: {error_msg}")
+            #     return False
     
     
     def _create_tasks(self, mode: Literal['new-rasp', 'rasp-change'], groups: dict = {}):
