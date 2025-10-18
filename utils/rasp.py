@@ -526,11 +526,36 @@ class Rasp:
         btns = [
             [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False)}"), 
              types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True)}"), 
-             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False)}")]
+             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False)}")],
+            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons")]
         ]
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
+    def count_quantity_lessons(self, group: int):
+        group_lessons = {}
+        import glob
+        files = glob.glob("data/txt/*.txt")
+        for file in files:
+            try:
+                lines: List[str] = self.rasp_parse(group, file)
+                if "Расписания нету!" in lines:
+                    continue
+                else:
+                    last_lesson = ''
+                    for line in lines:
+                        subject = line.split('|')[1].replace(" ", '').replace("`", '')
+                        excluded_subjects = {"v", "", "КураторскийЧас"} # Не учитывается
+                        if subject in excluded_subjects or subject == last_lesson:
+                            continue
+                        last_lesson = subject
+                        lessons = group_lessons.setdefault(group, {})
+                        lessons[subject] = lessons.get(subject, 0) + 1
+
+            except: continue
+
+        if group in group_lessons: return dict(sorted(group_lessons[group].items(), key=lambda x: x[1], reverse=True))
+        else: return {}
 
 class CheckRasp(Rasp):
     def __init__(self, date: str = None, is_teacher: bool = False) -> None:

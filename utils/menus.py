@@ -297,3 +297,31 @@ async def change_GROUP_group(id: int, state: FSMContext):
     await state.set_state(States.GROUP_change_group)
     await state.update_data(id=id)
     return text, types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]]) 
+
+
+
+async def quantity_lessons(user_id: int, state: FSMContext):
+    db = DB()
+    group = db.get_user_dataclass(user_id).group_id
+    rasp = Rasp()
+    lessons_dict = rasp.count_quantity_lessons(group)
+    if lessons_dict:
+        lessons_text = ""
+        total = 0
+        for idx, (lesson, count) in enumerate(lessons_dict.items(), start=1):
+            lessons_text += f"{idx}. <b>{lesson}</b> — <code>{count}</code> {'пара' if count == 1 else 'пары' if count in [2,3,4] else 'пар'}\n"
+            total += count
+        text = (
+            f"📊 <b>Статистика по предметам для группы <u>{group}</u></b>\n\n"
+            f"{lessons_text}\n"
+            f"<b>Всего пройдено пар:</b> <code>{total}</code>\n\n"
+            f"<i>Пары, которые разделяются на 2 подгруппы, теперь считаются как 1 пара!</i>"
+        )
+    else:
+        text = (
+            f"ℹ️ Для группы <b>{group}</b> нет данных о проведённых парах.\n"
+            f"Возможно, вы выбрали неправильную группу или расписаний пока нет."
+        )
+
+    btns = [[types.InlineKeyboardButton(text="◀️ Назад", callback_data=f"menu:rasp?{(rasp.date, False)}")]]
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
