@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  mtc-helper-bot:
+    build:
+      context: ..
+      dockerfile: docker_files/Dockerfile
+    container_name: mtc-helper-bot
+    restart: unless-stopped
+    volumes:
+      # Монтируем базу данных для сохранения данных
+      - ./database:/app/database
+      # Монтируем логи для просмотра
+      - ./logs:/app/logs
+      # Монтируем конфигурацию (если нужно изменять без пересборки)
+      - ./config.ini:/app/config.ini:ro
+    environment:
+      # Переменные окружения (добавьте свои)
+      - PYTHONUNBUFFERED=1
+    # Если нужен доступ к порту
+    # ports:
+    #   - "8000:8000"
+    # Если нужны переменные окружения из файла
+    # env_file:
+    #   - .env

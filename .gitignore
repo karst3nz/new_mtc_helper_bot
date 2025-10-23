@@ -179,3 +179,4 @@ database/
 logs/
 test.py
 config.ini
+*.tar.gz
