@@ -73,7 +73,20 @@ async def change_sec_group(msg: types.Message, state: FSMContext):
 @if_admin('msg')
 async def db_user_info(msg: types.Message, state: FSMContext):
     db = DB()
+    await state.clear()
     text = db.return_user_data(str(msg.text))
+    btns = [
+        [types.InlineKeyboardButton(text='< Назад', callback_data="menu:database")]
+    ]
+    await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
+
+
+@dp.message(States.db_group_info)
+@if_admin("msg")
+async def db_group_info(msg: types.Message, state: FSMContext):
+    db = DB()
+    await state.clear()
+    text = db.return_group_data(str(msg.text))
     btns = [
         [types.InlineKeyboardButton(text='< Назад', callback_data="menu:database")]
     ]

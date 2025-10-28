@@ -3,6 +3,7 @@ import sqlite3
 from typing import Literal
 from aiogram import types
 import os
+import config
 from utils.log import logging
 
 
@@ -280,3 +281,37 @@ class DB:
             return text
         except Exception as e:
             self.logger.error(e)    
+
+    def get_all_users_in_group(self, group: str):
+        self.cursor.execute(f"SELECT user_id FROM {self.users_table} WHERE group_id = ?", (group,))
+        r = self.cursor.fetchall()
+        users = []
+        for i in r: users.append(i[0])
+        return users
+
+    def return_group_data(self, group: str):
+        if group not in config.groups: 
+            return f"❌ Группа <b>{group}</b> не найдена в конфиге!"
+        
+        users = self.get_all_users_in_group(group)
+        if not users:
+            return f"📭 В группе <b>{group}</b> нет пользователей."
+        
+        text = f"👥 Пользователи в группе <b>{group}</b> ({len(users)} чел.):\n"
+        text += "─" * 40 + "\n"
+        
+        for idx, user_id in enumerate(users, start=1):
+            user = self.get_user_dataclass(user_id)
+            username = user.tg_username if user.tg_username else "❓ Без username"
+            link_to_chat = f"tg://user?id={user.user_id}"
+            link_to_info = f"/user {user.user_id}"
+            # Форматирование с выравниванием
+            if user.tg_username:
+                text += f"{idx:3d}. @{username} | ID: {user.user_id}\n"
+            else:
+                text += f"{idx:3d}. {username} | ID: {user.user_id}\n"
+        
+        return text
+
+
+        

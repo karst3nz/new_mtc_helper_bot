@@ -542,15 +542,23 @@ class Rasp:
                 if "Расписания нету!" in lines:
                     continue
                 else:
-                    last_lesson = ''
+                    last_lesson = ''; duplicated_lessons_count = 0
                     for line in lines:
                         subject = line.split('|')[1].replace(" ", '').replace("`", '')
                         excluded_subjects = {"v", "", "КураторскийЧас"} # Не учитывается
-                        if subject in excluded_subjects or subject == last_lesson:
-                            continue
-                        last_lesson = subject
-                        lessons = group_lessons.setdefault(group, {})
-                        lessons[subject] = lessons.get(subject, 0) + 1
+                        if duplicated_lessons_count >= 1:
+                            last_lesson = subject
+                            lessons = group_lessons.setdefault(group, {})
+                            lessons[subject] = lessons.get(subject, 0) + 1
+                            duplicated_lessons_count = 0
+                        else:
+                            if subject in excluded_subjects or subject == last_lesson:
+                                duplicated_lessons_count += 1
+                                continue
+
+                            last_lesson = subject
+                            lessons = group_lessons.setdefault(group, {})
+                            lessons[subject] = lessons.get(subject, 0) + 1
 
             except: continue
 
