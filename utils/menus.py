@@ -307,6 +307,7 @@ async def quantity_lessons(user_id: int, state: FSMContext):
             f"{lessons_text}\n"
             f"<b>Всего пройдено пар:</b> <code>{total}</code>\n\n"
             f"<i>Пары, которые разделяются на 2 подгруппы, теперь считаются как 1 пара!</i>"
+            f"<i><b>Данные могут быть неверными!</b></i>"
         )
     else:
         text = (

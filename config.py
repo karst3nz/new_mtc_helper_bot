@@ -30,6 +30,10 @@ BOT_TOKEN = config["bot_token"] if config["bot_token"] is not None else logger.e
 DEBUG = config["DEBUG"] if config["DEBUG"] is not None else logger.error("Empty parameter for DEBUG, using False"); DEBUG=False
 ADMIN_ID = config["admin_id"] if config["admin_id"] is not None else logger.error("Empty parameter for admin_id")
 SEND_RASP = config["send_rasp"] if config["send_rasp"] is not None else logger.error("Empty parameter for send_rasp")
+GOOGLE_DRIVE_KEY = config.get("google_drive_key", None)
+GOOGLE_DRIVE_SA_JSON = config.get("google_drive_sa_json", None)
+BACKUP_CHAT_ID = config.get("backup_chat_id", ADMIN_ID) if config.get("backup_chat_id", None) is not None else logger.error("Пустое значение для backup_chat_id! Бэкапы отправляю в лс админу...")
+
 
 groups = [
     "3191", "3395", "3195", "3196", "3391", "3393", "3491", "5111",

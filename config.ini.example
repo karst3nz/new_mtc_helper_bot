@@ -7,3 +7,6 @@ admin_id = YOUR_ADMIN_ID_HERE
 
 # Настройка отправки расписания (1/0)
 send_rasp = 1
+
+# Чат для бэкапа БД
+backup_chat_id = 

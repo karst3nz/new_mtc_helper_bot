@@ -28,7 +28,9 @@ RUN touch database/db.db
 RUN chmod 666 database/db.db
 
 # Открываем порт (если нужен)
-# EXPOSE 8000
+EXPOSE 8000
+EXPOSE 80
+EXPOSE 443
 
 # Команда по умолчанию
-CMD ["python", "main.py"]
+CMD ["python3", "main.py"]

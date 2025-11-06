@@ -46,6 +46,8 @@ async def bot_kicked_from_group(event: ChatMemberUpdated, state: FSMContext):
     await state.clear()
 
 async def bot_added_as_admin_and_leave(event: ChatMemberUpdated):
+    if str(event.chat.id) == BACKUP_CHAT_ID:
+        return
     if event.chat.type != "supergroup":
         text = "Не добавляйте меня в беседу как Администратора! ⚠️ Это может повлечь за собой потерю всех сообщений."
         await event.answer(text)

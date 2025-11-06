@@ -533,37 +533,55 @@ class Rasp:
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
     def count_quantity_lessons(self, group: int):
-        group_lessons = {}
         import glob
-        files = glob.glob("data/txt/*.txt")
+        from typing import Dict
+
+        def normalize_subject(raw: str) -> str:
+            s = raw.replace(' ', '').replace('`', '').replace('"', '').replace("'", '')
+            return s
+
+        excluded_subjects = {"v", "", "КураторскийЧас"}
+
+        group_to_subject_counts: Dict[int, Dict[str, int]] = {}
+
+        files = []
+        files.extend(glob.glob("data/txt/*.txt"))
+
         for file in files:
             try:
                 lines: List[str] = self.rasp_parse(group, file)
-                if "Расписания нету!" in lines:
+            except Exception:
+                continue
+
+            if not lines or "Расписания нету!" in lines:
+                continue
+
+            
+            for line in lines:
+                try:
+                    parts = [p.strip() for p in line.split('|')]
+                    if len(parts) < 2:
+                        continue
+                    lesson_number = parts[0]
+                    subject_raw = parts[1]
+                except Exception:
                     continue
-                else:
-                    last_lesson = ''; duplicated_lessons_count = 0
-                    for line in lines:
-                        subject = line.split('|')[1].replace(" ", '').replace("`", '')
-                        excluded_subjects = {"v", "", "КураторскийЧас"} # Не учитывается
-                        if duplicated_lessons_count >= 1:
-                            last_lesson = subject
-                            lessons = group_lessons.setdefault(group, {})
-                            lessons[subject] = lessons.get(subject, 0) + 1
-                            duplicated_lessons_count = 0
-                        else:
-                            if subject in excluded_subjects or subject == last_lesson:
-                                duplicated_lessons_count += 1
-                                continue
 
-                            last_lesson = subject
-                            lessons = group_lessons.setdefault(group, {})
-                            lessons[subject] = lessons.get(subject, 0) + 1
+                if not lesson_number:
+                    continue
 
-            except: continue
+                subject = normalize_subject(subject_raw)
+                if subject in excluded_subjects:
+                    continue
 
-        if group in group_lessons: return dict(sorted(group_lessons[group].items(), key=lambda x: x[1], reverse=True))
-        else: return {}
+                lessons = group_to_subject_counts.setdefault(group, {})
+                lessons[subject] = lessons.get(subject, 0) + 1
+
+        if group not in group_to_subject_counts:
+            return {}
+
+        return dict(sorted(group_to_subject_counts[group].items(), key=lambda x: x[1], reverse=True))
+
 
 class CheckRasp(Rasp):
     def __init__(self, date: str = None, is_teacher: bool = False) -> None:

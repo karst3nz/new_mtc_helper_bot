@@ -26,11 +26,27 @@ def create_dirs():
         os.makedirs(dir, exist_ok=True)
 
 
+
+def db_backup():
+    from aiogram import Bot
+    from aiocron import crontab
+
+    async def backup_job():
+        from utils.tg_db_backup import send_db_to_admin
+        await send_db_to_admin()
+
+    # Бэкап в 3:00 ночи каждый день
+    crontab('0 3 * * *')(backup_job)
+    # Тестовый бэкап через 10 секунд после запуска
+    # crontab('*/10 * * * * *', start=True, loop=None)(backup_job)
+
+
 async def __init__():
     modules = [
         {"name": "создание нужных директорий", "func": create_dirs},
         {"name": "логирование", "func": create_logger, "args": __name__},
         {"name": "БД", "func": DB},
+        {"name": "бэкап БД", "func": db_backup},
         # {"name": "проверку групп в конфиге", "func": check_groups.run},
         # {"name": "удаление пользователей с неиспользуемыми ботом группами", "func": delete_users.run},
         {"name": "бота", "func": start_bot},
