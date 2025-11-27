@@ -465,6 +465,8 @@ class Rasp:
 
     async def get_lessons_duration(self, group: int):
         rasp_data = self.rasp_parse(group, self.txt_dir, return_rasp_data=True)
+        if rasp_data == ['Расписания нету!']:
+            return None, None
         lessons_data = []
         for key in rasp_data.keys():
             key_data = rasp_data.get(key)
@@ -525,6 +527,7 @@ class Rasp:
     async def gen_rasp_footer_text(self, user_id: int, group: str):
         db = DB()
         first_num, last_num = await self.get_lessons_duration(group)
+        if first_num is None and last_num is None: return ''
         smena = db.get_user_dataclass(user_id).smena
         weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
         start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
