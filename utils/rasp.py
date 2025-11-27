@@ -525,7 +525,6 @@ class Rasp:
     async def gen_rasp_footer_text(self, user_id: int, group: str):
         db = DB()
         first_num, last_num = await self.get_lessons_duration(group)
-        print(first_num, last_num)
         smena = db.get_user_dataclass(user_id).smena
         weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
         start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)

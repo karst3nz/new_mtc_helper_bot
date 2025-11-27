@@ -23,15 +23,6 @@ async def rasp(user_id: int, date: str = None, _get_new: bool = False):
     )
     user = db.get_user_dataclass(user_id)
     if "rasp" in str(user.show_missed_hours_mode): text += f"\n⏰ У тебя сейчас <b>{user.missed_hours}</b> пропущенных часов.\n\n"
-
-    # first_num, last_num = await rasp.get_lessons_duration("3395")
-    # print(first_num, last_num)
-    # smena = db.get_user_dataclass(user_id).smena
-    # weekday = True if datetime.today().weekday() not in (5, 6) else False
-    # start_time = get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
-    # end_time = get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
-    
-    # text += f"Пары начнутся в {start_time}.\nЗакончатся в {end_time}"
     return text, btns
 
 
