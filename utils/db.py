@@ -3,6 +3,7 @@ import sqlite3
 from typing import Literal
 from aiogram import types
 import os
+
 import config
 from utils.log import logging
 
@@ -51,6 +52,7 @@ class DB:
                 sec_group_id                INTEGER,
                 missed_hours                INTEGER,
                 show_missed_hours_mode      TEXT,
+                smena                       TEXT,
                 UNIQUE (user_id,tg_username) 
             )
         ''')
@@ -68,6 +70,7 @@ class DB:
         self.conn.commit()
 
         self.insert_column("pin_new_rasp", "groups", "BOOL", False)
+        self.insert_column("smena", "users", "TEXT", "1")
 
     def insert(self, user_id: int, tg_username: str, group_id: int, sec_group_id: int):
         """
@@ -75,9 +78,9 @@ class DB:
         """
         if self.is_exists(user_id) is False:
             self.cursor.execute(
-                'INSERT INTO users (user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode)'
-                'VALUES (?, ?, ?, ?, ?, ?)',
-                (user_id, tg_username, group_id, sec_group_id, 0, None))
+                'INSERT INTO users (user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode, smena)'
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (user_id, tg_username, group_id, sec_group_id, 0, None, "1"))
             self.conn.commit()
         from config import bot, ADMIN_ID
         user_text = (
@@ -192,7 +195,7 @@ class DB:
 
     def get_user_groups(self, user_id: int):
         self.cursor.execute(f"SELECT group_id, sec_group_id FROM {self.users_table} WHERE user_id = ?", (user_id,))
-        result = self.cursor.fetchone()
+        result = self.cursor.fetchone()sftp://root@93.183.72.70/root/new_mtc_helper_bot/data/
         if result is not None:
             return result[0], result[1]
         else:
@@ -237,11 +240,11 @@ class DB:
     def get_user_dataclass(self, user_id: int):
         from utils.dataclasses_ import User
         if self.is_exists(user_id):
-            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode, smena FROM users WHERE user_id = ?", (user_id,)).fetchone()
             user = User(*r)   
             return user
         else:
-            return User(None, None, None, None, None, None, None)
+            return User(None, None, None, None, None, None, None, None)
             
     def get_TGgroup_dataclass(self, id: int):
         from utils.dataclasses_ import TGgroup

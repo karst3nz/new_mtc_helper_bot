@@ -5,6 +5,7 @@ from utils.db import DB
 from handlers import msg, inline, cmd, event
 from utils.log import create_logger
 from utils import check_groups, delete_users
+from utils.rasp import CheckRasp
 
 
 
@@ -24,6 +25,20 @@ def create_dirs():
     import os
     for dir in dirs:
         os.makedirs(dir, exist_ok=True)
+
+
+def rasp_loop():
+    async def _run():
+        while True:
+            from datetime import datetime, timedelta
+            tomorrow = datetime.now().date() + timedelta(days=1)
+            if tomorrow.weekday() == 6:
+                tomorrow = tomorrow + timedelta(days=1)
+            tomorrow_str = tomorrow.strftime("%d_%m_%Y")
+            cr = CheckRasp(date=tomorrow_str)
+            await cr.check_rasp_loop()
+    asyncio.create_task(_run())
+            
 
 
 
@@ -50,7 +65,8 @@ async def __init__():
         # {"name": "проверку групп в конфиге", "func": check_groups.run},
         # {"name": "удаление пользователей с неиспользуемыми ботом группами", "func": delete_users.run},
         {"name": "бота", "func": start_bot},
-        {"name": "установку команд", "func": cmds}
+        {"name": "установку команд", "func": cmds},
+        {"name": "цикличную проверку расписания", "func": rasp_loop}
     ]
     for module in modules:
         print(f"Инициализирую {module['name']}... ", end='', flush=False)

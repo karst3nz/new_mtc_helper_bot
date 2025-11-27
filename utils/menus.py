@@ -7,7 +7,7 @@ from utils.db import DB
 from utils.state import States
 from datetime import datetime
 
-from utils.utils import format_and_return_columns
+from utils.utils import format_and_return_columns, get_lesson_time
 logger = create_logger(__name__)
 
 async def rasp(user_id: int, date: str = None, _get_new: bool = False):
@@ -18,10 +18,20 @@ async def rasp(user_id: int, date: str = None, _get_new: bool = False):
     text, btns = await rasp.create_rasp_msg(
         group=group,
         sec_group=sec_group,
-        _get_new=_get_new
+        _get_new=_get_new,
+        user_id=user_id
     )
     user = db.get_user_dataclass(user_id)
-    if "rasp" in str(user.show_missed_hours_mode): text += f"\n⏰ У тебя сейчас <b>{user.missed_hours}</b> пропущенных часов."
+    if "rasp" in str(user.show_missed_hours_mode): text += f"\n⏰ У тебя сейчас <b>{user.missed_hours}</b> пропущенных часов.\n\n"
+
+    # first_num, last_num = await rasp.get_lessons_duration("3395")
+    # print(first_num, last_num)
+    # smena = db.get_user_dataclass(user_id).smena
+    # weekday = True if datetime.today().weekday() not in (5, 6) else False
+    # start_time = get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
+    # end_time = get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
+    
+    # text += f"Пары начнутся в {start_time}.\nЗакончатся в {end_time}"
     return text, btns
 
 
@@ -83,6 +93,7 @@ async def settings(user_id: int, state: FSMContext):
     btns = [
         [types.InlineKeyboardButton(text="✏️ Изменить основную группу", callback_data="menu:change_main_group")],
         [types.InlineKeyboardButton(text="✏️ Изменить доп. группу" if sec_group is not None else "➕ Добавить доп. группу", callback_data="menu:change_sec_group")],
+        [types.InlineKeyboardButton(text="🔄 Изменить смену", callback_data="menu:smena_edit")],
         [types.InlineKeyboardButton(text="⏰ Отображение пропущенных часов", callback_data="menu:missed_hours_mode")],
         [types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")]
     ]
@@ -306,7 +317,7 @@ async def quantity_lessons(user_id: int, state: FSMContext):
             f"📊 <b>Статистика по предметам для группы <u>{group}</u></b>\n\n"
             f"{lessons_text}\n"
             f"<b>Всего пройдено пар:</b> <code>{total}</code>\n\n"
-            f"<i>Пары, которые разделяются на 2 подгруппы, теперь считаются как 1 пара!</i>"
+            f"<i>Пары, которые разделяются на 2 подгруппы, теперь считаются как 1 пара!</i>\n"
             f"<i><b>Данные могут быть неверными!</b></i>"
         )
     else:
@@ -316,4 +327,38 @@ async def quantity_lessons(user_id: int, state: FSMContext):
         )
 
     btns = [[types.InlineKeyboardButton(text="◀️ Назад", callback_data=f"menu:rasp?{(rasp.date, False)}")]]
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def smena_edit(user_id: int, smena: str = None):
+    from utils.utils import get_lessons_timeDT
+    db = DB()
+    if smena == "1":
+        db.update(user_id, "smena", "1", db.users_table)
+    elif smena == "2":
+        db.update(user_id, "smena", "2", db.users_table)
+    userDC = db.get_user_dataclass(user_id)
+    def get_btn_text(_smena: str):
+        return f"✅️ {_smena} смена" if userDC.smena == _smena else f"{_smena} смена"
+    btns = [
+        [types.InlineKeyboardButton(text=get_btn_text("1"), callback_data="menu:smena_edit?('1')")],
+        [types.InlineKeyboardButton(text=get_btn_text("2"), callback_data="menu:smena_edit?('2')")],
+        [types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:settings")]
+    ]
+    lessons = get_lessons_timeDT().weekday.shifts.get(userDC.smena)
+    lessons_text = ""
+    for lesson_num, lesson_name in lessons.items():
+        if "/" in lesson_num:
+            lesson_num_fmt = f"{lesson_num.replace('/2', '')}"
+            line = f"<b>{lesson_num_fmt}</b>: <i>{lesson_name}</i>\n"
+        else:
+            line = f"   <i>{lesson_name}</i>\n"
+        lessons_text += line
+
+    text = (
+        f"<b>🔄 Текущая смена:</b> <b>{userDC.smena}-ая</b>\n\n"
+        f"<b>🕰️ Расписание звонков для вашей смены:</b>\n"
+        f"<code>{lessons_text}</code>\n"
+        f"<i>Выберите нужную смену кнопками ниже.</i>"
+    )
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
