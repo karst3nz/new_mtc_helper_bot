@@ -195,7 +195,7 @@ class DB:
 
     def get_user_groups(self, user_id: int):
         self.cursor.execute(f"SELECT group_id, sec_group_id FROM {self.users_table} WHERE user_id = ?", (user_id,))
-        result = self.cursor.fetchone()sftp://root@93.183.72.70/root/new_mtc_helper_bot/data/
+        result = self.cursor.fetchone()
         if result is not None:
             return result[0], result[1]
         else:
