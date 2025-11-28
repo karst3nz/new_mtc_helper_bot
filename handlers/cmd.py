@@ -67,3 +67,22 @@ async def admin(msg: types.Message, state: FSMContext):
     )
 
 
+
+@dp.message(Command("lesson_schedule"))
+@check_chat_type("private")
+async def lesson_schedule(msg: types.Message, state: FSMContext):
+    await state.clear()
+    text, btns = await menus.lesson_schedule(msg.from_user.id if msg.chat.type == "private" else msg.chat.id)
+    await msg.answer(
+        text=text,
+        reply_markup=btns
+    )    
+
+
+@dp.message(Command("test"))
+async def test(msg: types.Message):
+    text, btns = await menus.test(msg.from_user.id)
+    await msg.answer(
+        text=text,
+        reply_markup=btns
+    ) 

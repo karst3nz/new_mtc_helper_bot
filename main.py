@@ -18,6 +18,7 @@ def cmds():
         types.BotCommand(command="/start", description="🎓 Главное меню"),
         types.BotCommand(command="/settings", description="⚙️ Настройки"),
         types.BotCommand(command="/hours", description="⏰ Пропущенные часы"),
+        types.BotCommand(command="/lesson_schedule", description="🔔 Расписание звонков")
     ]))
 
 def create_dirs():

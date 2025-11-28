@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 import config
 from utils.decorators import if_admin
 from utils.rasp import Rasp
@@ -49,7 +50,8 @@ async def start(user_id: int, state: FSMContext):
                 "Выберите нужный раздел:"
             )
         btns = [
-            [types.InlineKeyboardButton(text="📅 Расписание", callback_data="menu:rasp")],
+            [types.InlineKeyboardButton(text="📅 Расписание пар", callback_data="menu:rasp")],
+            [types.InlineKeyboardButton(text="🔔 Расписание звонков", callback_data="menu:lesson_schedule?('True')")],
             [types.InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")]
         ]
         if str(user_id) == str(config.ADMIN_ID): btns += [[types.InlineKeyboardButton(text='ADMIN', callback_data="menu:admin")]]
@@ -293,7 +295,7 @@ async def change_GROUP_group(id: int, state: FSMContext):
 
 
 
-async def quantity_lessons(user_id: int, state: FSMContext):
+async def quantity_lessons(user_id: int, date: str):
     db = DB()
     group = db.get_user_dataclass(user_id).group_id
     rasp = Rasp()
@@ -317,7 +319,7 @@ async def quantity_lessons(user_id: int, state: FSMContext):
             f"Возможно, вы выбрали неправильную группу или расписаний пока нет."
         )
 
-    btns = [[types.InlineKeyboardButton(text="◀️ Назад", callback_data=f"menu:rasp?{(rasp.date, False)}")]]
+    btns = [[types.InlineKeyboardButton(text="◀️ Назад", callback_data=f"menu:rasp?{(date, False)}")]]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
 
@@ -339,8 +341,8 @@ async def smena_edit(user_id: int, smena: str = None):
     lessons = get_lessons_timeDT().weekday.shifts.get(userDC.smena)
     lessons_text = ""
     for lesson_num, lesson_name in lessons.items():
-        if "/" in lesson_num:
-            lesson_num_fmt = f"{lesson_num.replace('/2', '')}"
+        if "/" not in lesson_num:
+            lesson_num_fmt = f"{lesson_num}"
             line = f"<b>{lesson_num_fmt}</b>: <i>{lesson_name}</i>\n"
         else:
             line = f"   <i>{lesson_name}</i>\n"
@@ -353,3 +355,34 @@ async def smena_edit(user_id: int, smena: str = None):
         f"<i>Выберите нужную смену кнопками ниже.</i>"
     )
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def lesson_schedule(chat_id: int, weekday: Literal["True", "False"] = "True"):
+    from utils.utils import get_lessons_timeDT
+    db = DB()
+    userDC = db.get_user_dataclass(chat_id)
+    lessons = get_lessons_timeDT().weekday.shifts.get(userDC.smena) if weekday == "True" else get_lessons_timeDT().weekend.shifts.get(userDC.smena)
+    lessons_text = ""
+    for lesson_num, lesson_name in lessons.items():
+        if "/" not in lesson_num:
+            lesson_num_fmt = f"{lesson_num}"
+            line = f"<b>{lesson_num_fmt}</b>: <i>{lesson_name}</i>\n"
+        else:
+            line = f"   <i>{lesson_name}</i>\n"
+        lessons_text += line
+    text = (
+        f"<b>🕰️ Расписание звонков:</b>\n\n"
+        f"<code>{lessons_text}</code>"
+    )    
+
+    btns = [
+        [types.InlineKeyboardButton(text=f"✅️ Пн-Пт" if weekday == "True" else f"Пн-Пт", callback_data="menu:lesson_schedule?('True')")],
+        [types.InlineKeyboardButton(text=f"✅️ Суббота" if weekday == "False" else f"Суббота", callback_data="menu:lesson_schedule?('False')")],
+        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+    ]
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def test(user_id, arg1 = None, arg2 = None, arg3 = None):
+    print(arg1, arg2, arg3)
+    return "Tecт", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="test", callback_data="menu:test?('1', '2', '3')")]])

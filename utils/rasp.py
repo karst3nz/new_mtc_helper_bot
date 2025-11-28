@@ -578,7 +578,7 @@ class Rasp:
             [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False)}"), 
              types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True)}"), 
              types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False)}")],
-            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons")]
+            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?('{reload_btn}')")]
         ]
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
