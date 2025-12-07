@@ -11,11 +11,11 @@ from datetime import datetime
 from utils.utils import format_and_return_columns, get_lesson_time
 logger = create_logger(__name__)
 
-async def rasp(user_id: int, date: str = None, _get_new: bool = False):
+async def rasp(user_id: int, date: str = None, _get_new: bool = False, show_lessons_time: bool = False):
     db = DB()
     group, sec_group = db.get_user_groups(user_id)
     date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
-    rasp = Rasp(date)
+    rasp = Rasp(date); rasp.show_lesson_time = show_lessons_time
     text, btns = await rasp.create_rasp_msg(
         group=group,
         sec_group=sec_group,
@@ -381,8 +381,3 @@ async def lesson_schedule(chat_id: int, weekday: Literal["True", "False"] = "Tru
         [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
     ]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
-
-
-async def test(user_id, arg1 = None, arg2 = None, arg3 = None):
-    print(arg1, arg2, arg3)
-    return "Tecт", types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="test", callback_data="menu:test?('1', '2', '3')")]])

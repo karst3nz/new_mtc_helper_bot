@@ -24,6 +24,8 @@ class Rasp:
         self.excluded_subjects = ["v", "", "КураторскийЧас"]
         self.count_excluded_subjects = ["v", ""]
         self.half_subjects = ["ФаФизКулИздор."]
+        self.show_lesson_time: bool = False
+        self.user_id: int | None = None
 
         if not self.is_teacher:
             self.filename = f"PODNAM%20{self.dateWyear}.htm"
@@ -195,6 +197,8 @@ class Rasp:
 
 
     async def check_diff(self):
+        prev_show_lesson_time = self.show_lesson_time
+        self.show_lesson_time = False
         from config import groups
         self.logger.info(f"[CHECK_DIFF] Начало проверки изменений | Дата: {self.date} | Групп для проверки: {len(groups)}")
         checkrasp = CheckRasp(self.date, self.is_teacher)
@@ -259,7 +263,7 @@ class Rasp:
             except Exception as e:
                 self.logger.error(f"[CHECK_DIFF] Ошибка проверки группы | Группа: {group} | Ошибка: {str(e)} | Тип: {type(e).__name__}")
                 continue
-        
+        self.show_lesson_time = prev_show_lesson_time
         self.logger.info(f"[CHECK_DIFF] Проверка завершена | Всего групп: {len(groups)} | Групп с изменениями: {groups_with_changes} | Общая длина diff: {total_diff_length} символов")
                 
 
@@ -403,7 +407,11 @@ class Rasp:
                 inside_classes = True
 
         if rasp_list:
+            db = DB()
+            smena = db.get_user_dataclass(self.user_id).smena
+            weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False   
             rasp_info = self.rasp_data_get(rasp_list)
+            prev_lesson_number = '  '  
             if return_rasp_data is True: return rasp_info
             if isinstance(rasp_info, dict):
                 try:
@@ -411,16 +419,34 @@ class Rasp:
                     lesson_id = min(item['lesson_id'] for item in rasp_info.values() if item['lesson_id']) - 1
                 except ValueError:
                     self.logger.warning("Не удалось определить диапазон уроков для группы %s", group)
-                    return ['Расписания нету!']
-                
+                    return ['Расписания нету!'] 
+                           
                 while lesson_id < lesson_number_to_lookup:
                     lesson_id += 1
                     rasp_info_process = rasp_info.get(lesson_id)
-                    if rasp_info_process:
+                    
+                    if rasp_info_process and self.show_lesson_time is False:
                         rasp_list_done.append(
                             f"{rasp_info_process['lesson_number']} | {rasp_info_process['subject']} "
                             f"| {rasp_info_process['classroom_number']} | {rasp_info_process['teacher']}"
                         )
+                    elif rasp_info_process and self.show_lesson_time is True:
+                        lesson_number: str = rasp_info_process['lesson_number']
+
+                        if lesson_number == '  ' and prev_lesson_number != '  ' : lesson_number = prev_lesson_number
+                        elif lesson_number == '  '  and prev_lesson_number == '  ' : prev_lesson_number = lesson_number
+                        elif lesson_number != '  '  and lesson_number != prev_lesson_number: prev_lesson_number = lesson_number
+
+                        start_time = utils.get_lesson_time(lesson_number, start=True, weekday=weekday, smena=smena)
+                        end_time = utils.get_lesson_time(lesson_number, start=False, weekday=weekday, smena=smena)
+                        lesson_time = f"{start_time} — {end_time}"
+                        rasp_list_done.append(
+                            f"{lesson_time} | {rasp_info_process['lesson_number']} "
+                            f"| {rasp_info_process['subject']}"
+                        )
+                        prev_lesson_number = lesson_number
+
+
 
             return rasp_list_done
 
@@ -429,7 +455,7 @@ class Rasp:
 
     def rasp_data_get(self, schedule_data: list[str]) -> dict[int, dict]:
         schedule_info: dict[int, dict] = {}
-
+        prev_group_number = None
         for lesson_id, line in enumerate(schedule_data, start=1):
             parts = [part.strip() for part in line.split("¦")]
             if len(parts) < 6:
@@ -437,6 +463,11 @@ class Rasp:
                 continue
 
             group_number: str | None = parts[1] or None
+            ### Для адекватной записи номера группы в словарь, ранее если номера группы не было в line, то выводился None ###
+            if group_number is None and prev_group_number is not None: group_number = prev_group_number
+            elif group_number is None and prev_group_number is None: prev_group_number = group_number
+            elif group_number is not None and group_number != prev_group_number: prev_group_number = group_number
+            ###
             lesson_number_raw: str = parts[2]
             lesson_number: str = lesson_number_raw if lesson_number_raw else "  "
 
@@ -448,7 +479,6 @@ class Rasp:
                 "classroom_number": parts[4],
                 "teacher": parts[5],
             }
-
 
         return schedule_info
 
@@ -535,6 +565,7 @@ class Rasp:
         return f"<b>🕒 Время занятий:</b> {start_time} — {end_time}"
 
     async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False, user_id: int = None):
+        self.user_id = user_id
         group = str(group)
         head_text = self.gen_head_text(group, mode='None', rasp_mode="main")
         _rasp_text = await self.get_rasp(group, _get_new)
@@ -575,9 +606,10 @@ class Rasp:
         if datetime.strptime(back_btn, "%d_%m_%Y").date().weekday() == 6:
             back_btn = (dateObj - timedelta(days=2)).strftime("%d_%m_%Y")
         btns = [
-            [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False)}"), 
-             types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True)}"), 
-             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False)}")],
+            [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False, self.show_lesson_time)}"), 
+             types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True, self.show_lesson_time)}"), 
+             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False, self.show_lesson_time)}")],
+            [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")],
             [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?('{reload_btn}')")]
         ]
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")

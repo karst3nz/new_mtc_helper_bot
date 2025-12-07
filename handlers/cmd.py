@@ -1,7 +1,9 @@
+from datetime import datetime
 from config import *
 from utils import menus
 from utils.log import create_logger
 from utils.db import DB
+from utils.rasp import Rasp
 from utils.state import States
 from utils.decorators import check_chat_type, if_admin
 logger = create_logger(__name__)
@@ -79,10 +81,23 @@ async def lesson_schedule(msg: types.Message, state: FSMContext):
     )    
 
 
-@dp.message(Command("test"))
-async def test(msg: types.Message):
-    text, btns = await menus.test(msg.from_user.id)
-    await msg.answer(
-        text=text,
-        reply_markup=btns
-    ) 
+
+# @dp.message(Command("test"))
+# async def test(msg: types.Message, state: FSMContext):
+#     await state.clear()
+#     db = DB()
+#     user_id = msg.from_user.id
+#     group, sec_group = db.get_user_groups(user_id)
+#     rasp = Rasp("08_12_2025"); rasp.show_lesson_time = True; rasp.user_id = user_id
+#     text, btns = await rasp.create_rasp_msg(
+#         group=group,
+#         sec_group=sec_group,
+#         _get_new=True,
+#         user_id=user_id
+#     )
+#     user = db.get_user_dataclass(user_id)
+#     if "rasp" in str(user.show_missed_hours_mode): text += f"\n⏰ У тебя сейчас <b>{user.missed_hours}</b> пропущенных часов.\n\n"
+#     await msg.answer(
+#         text=text,
+#         reply_markup=btns
+#     )
