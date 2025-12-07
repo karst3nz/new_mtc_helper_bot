@@ -6,7 +6,7 @@ from utils.rasp import Rasp
 from utils.log import create_logger
 from utils.db import DB
 from utils.state import States
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from utils.utils import format_and_return_columns, get_lesson_time
 logger = create_logger(__name__)
@@ -14,7 +14,11 @@ logger = create_logger(__name__)
 async def rasp(user_id: int, date: str = None, _get_new: bool = False, show_lessons_time: bool = False):
     db = DB()
     group, sec_group = db.get_user_groups(user_id)
-    date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
+    if date is None:
+        if datetime.today().weekday() != 6:
+            date = datetime.today().date().strftime("%d_%m_%Y")
+        else:
+            date = (datetime.today().date() + timedelta(days=1)).strftime("%d_%m_%Y")
     rasp = Rasp(date); rasp.show_lesson_time = show_lessons_time
     text, btns = await rasp.create_rasp_msg(
         group=group,
