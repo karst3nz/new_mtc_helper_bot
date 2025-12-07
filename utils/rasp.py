@@ -610,7 +610,7 @@ class Rasp:
              types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True, self.show_lesson_time)}"), 
              types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False, self.show_lesson_time)}")],
             [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")],
-            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?('{reload_btn}')")]
+            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?{(reload_btn, self.show_lesson_time)}")]
         ]
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
@@ -618,6 +618,8 @@ class Rasp:
     def count_quantity_lessons(self, group: int):
         import glob
         from typing import Dict
+        prev_show_lesson_time = self.show_lesson_time
+        self.show_lesson_time = False
 
         def normalize_subject(raw: str) -> str:
             s = raw.replace(' ', '').replace('`', '').replace('"', '').replace("'", '')
@@ -660,7 +662,7 @@ class Rasp:
 
         if group not in group_to_subject_counts:
             return {}
-
+        self.show_lesson_time = prev_show_lesson_time
         return dict(sorted(group_to_subject_counts[group].items(), key=lambda x: x[1], reverse=True))
 
 

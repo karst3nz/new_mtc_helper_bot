@@ -295,7 +295,7 @@ async def change_GROUP_group(id: int, state: FSMContext):
 
 
 
-async def quantity_lessons(user_id: int, date: str):
+async def quantity_lessons(user_id: int, date: str, show_lesson_time: bool = False):
     db = DB()
     group = db.get_user_dataclass(user_id).group_id
     rasp = Rasp()
@@ -319,7 +319,7 @@ async def quantity_lessons(user_id: int, date: str):
             f"Возможно, вы выбрали неправильную группу или расписаний пока нет."
         )
 
-    btns = [[types.InlineKeyboardButton(text="◀️ Назад", callback_data=f"menu:rasp?{(date, False)}")]]
+    btns = [[types.InlineKeyboardButton(text="◀️ Назад", callback_data=f"menu:rasp?{(date, False, show_lesson_time)}")]]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
 
