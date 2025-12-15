@@ -2,6 +2,8 @@ from datetime import date, datetime, timedelta
 from itertools import count
 import logging
 import os
+from pickle import FALSE
+from re import T
 import tempfile
 from typing import Literal
 import asyncio
@@ -442,7 +444,7 @@ class Rasp:
                         lesson_time = f"{start_time} — {end_time}"
                         rasp_list_done.append(
                             f"{lesson_time} | {rasp_info_process['lesson_number']} "
-                            f"| {rasp_info_process['subject']}"
+                            f"| {rasp_info_process['subject']} | {rasp_info_process['classroom_number']} |"
                         )
                         prev_lesson_number = lesson_number
 
@@ -555,14 +557,16 @@ class Rasp:
             return f'{footer.get(rasp_mode)}'
 
     async def gen_rasp_footer_text(self, user_id: int, group: str):
-        db = DB()
-        first_num, last_num = await self.get_lessons_duration(group)
-        if first_num is None and last_num is None: return ''
-        smena = db.get_user_dataclass(user_id).smena
-        weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
-        start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
-        end_time = utils.get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
-        return f"<b>🕒 Время занятий:</b> {start_time} — {end_time}"
+        if self.show_lesson_time is False:
+            db = DB()
+            first_num, last_num = await self.get_lessons_duration(group)
+            if first_num is None and last_num is None: return ''
+            smena = db.get_user_dataclass(user_id).smena
+            weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
+            start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
+            end_time = utils.get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
+            return f"<b>🕒 Время занятий:</b> {start_time} — {end_time}"
+        else: return ''
 
     async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False, user_id: int = None):
         self.user_id = user_id
@@ -575,28 +579,17 @@ class Rasp:
             self.logger.debug(f"Добавление второго расписания для группы {sec_group}")
             sec_head_text = self.gen_head_text(sec_group, mode='None', rasp_mode="sec")
             _sec_rasp_text += await self.get_rasp(sec_group, _get_new)
-        
-        if sec_head_text != '' and _sec_rasp_text != '':
-            text = f"""
-{head_text}
-
-{_rasp_text}
-
-{await self.gen_rasp_footer_text(user_id, group)}
-{sec_head_text}
-
-{_sec_rasp_text}
-
-{await self.gen_rasp_footer_text(user_id, sec_group)}
-"""
-        else:
-            text = f"""
-{head_text}
-
-{_rasp_text}
-
-{await self.gen_rasp_footer_text(user_id, group)}
-"""
+        main_text = [
+            f'{head_text}\n\n',
+            f'{_rasp_text}\n',
+        ]
+        if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}\n")
+        if sec_head_text != '' and _sec_rasp_text != '': 
+            _list = [f'{sec_head_text}\n\n',f'{_sec_rasp_text}\n'] 
+            main_text.extend(i for i in _list) 
+            if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}\n")
+        text = ''
+        for i in main_text: text += i
         dateObj = datetime.strptime(self.date, "%d_%m_%Y").date()        
         back_btn = (dateObj - timedelta(days=1)).strftime("%d_%m_%Y")
         reload_btn = dateObj.strftime("%d_%m_%Y")
