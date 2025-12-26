@@ -19,7 +19,7 @@ async def rasp(user_id: int, date: str = None, _get_new: bool = False, show_less
             date = datetime.today().date().strftime("%d_%m_%Y")
         else:
             date = (datetime.today().date() + timedelta(days=1)).strftime("%d_%m_%Y")
-    rasp = Rasp(date); rasp.show_lesson_time = show_lessons_time
+    rasp = Rasp(date, group=group); rasp.show_lesson_time = show_lessons_time
     text, btns = await rasp.create_rasp_msg(
         group=group,
         sec_group=sec_group,
@@ -302,7 +302,7 @@ async def change_GROUP_group(id: int, state: FSMContext):
 async def quantity_lessons(user_id: int, date: str, show_lesson_time: bool = False):
     db = DB()
     group = db.get_user_dataclass(user_id).group_id
-    rasp = Rasp()
+    rasp = Rasp(group=group)
     lessons_dict = rasp.count_quantity_lessons(group)
     if lessons_dict:
         lessons_text = ""

@@ -14,7 +14,7 @@ from config import *
 
 
 class Rasp:
-    def __init__(self, date: str = None, is_teacher: bool = False) -> None:
+    def __init__(self, date: str = None, is_teacher: bool = False, group: int = None) -> None:
         self.is_teacher = is_teacher
         self.logger = create_logger("Rasp")
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
@@ -28,6 +28,7 @@ class Rasp:
         self.half_subjects = ["ФаФизКулИздор."]
         self.show_lesson_time: bool = False
         self.user_id: int | None = None
+        self.group: int | None = None
 
         if not self.is_teacher:
             self.filename = f"PODNAM%20{self.dateWyear}.htm"
@@ -408,7 +409,7 @@ class Rasp:
                 self.logger.debug(f"Найдена секция группы {group} в файле")
                 rasp_list.append(line)
                 inside_classes = True
-                self.rasp_exists4group = True
+                if self.group == group: self.rasp_exists4group = True
 
         if rasp_list:
             db = DB()
@@ -578,6 +579,7 @@ class Rasp:
 
     async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False, user_id: int = None):
         self.user_id = user_id
+        self.group = group
         group = str(group)
         head_text = self.gen_head_text(group, mode='None', rasp_mode="main")
         _rasp_text = await self.get_rasp(group, _get_new)
@@ -622,6 +624,7 @@ class Rasp:
     def count_quantity_lessons(self, group: int):
         import glob
         from typing import Dict
+        self.group = group
         prev_show_lesson_time = self.show_lesson_time
         self.show_lesson_time = False
 
@@ -637,7 +640,8 @@ class Rasp:
         for file in files:
             try:
                 lines: List[str] = self.rasp_parse(group, file)
-            except Exception:
+            except Exception as e:
+                self.logger.warning(e)
                 continue
 
             if not lines or "Расписания нету!" in lines or "<b>Выходной!</b>" in lines:
