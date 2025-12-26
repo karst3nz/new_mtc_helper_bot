@@ -2,8 +2,6 @@ from datetime import date, datetime, timedelta
 from itertools import count
 import logging
 import os
-from pickle import FALSE
-from re import T
 import tempfile
 from typing import Literal
 import asyncio
@@ -23,6 +21,8 @@ class Rasp:
         self.logger.info(f"Инициализация Rasp с датой: {self.date}")
         self.dateWyear = self.date.split('_')[:2][0] + "_" + self.date.split('_')[:2][1]
         self.rasp_exists = False
+        self.rasp_exists4group = False
+        self.rasp_file_exists = False
         self.excluded_subjects = ["v", "", "КураторскийЧас"]
         self.count_excluded_subjects = ["v", ""]
         self.half_subjects = ["ФаФизКулИздор."]
@@ -371,8 +371,9 @@ class Rasp:
         txt_dir = txt_dir if txt_dir is not None else self.txt_dir
         if not os.path.isfile(txt_dir):
             self.logger.warning("Расписание не найдено: файл отсутствует %s", txt_dir)
+            self.rasp_file_exists = False
             return ['Расписания нету!']
-
+        self.rasp_file_exists = True
         try:
             with open(txt_dir, "r", encoding="windows-1251") as file:
                 content = file.read()
@@ -407,6 +408,7 @@ class Rasp:
                 self.logger.debug(f"Найдена секция группы {group} в файле")
                 rasp_list.append(line)
                 inside_classes = True
+                self.rasp_exists4group = True
 
         if rasp_list:
             db = DB()
@@ -452,7 +454,13 @@ class Rasp:
 
             return rasp_list_done
 
-        return ['Расписания нету!']
+        if self.rasp_file_exists is True and self.rasp_exists4group is False:
+            return_list = ['<b>Выходной!</b>']
+        elif self.rasp_file_exists is False:
+            return_list = ['Расписания нету!']
+        else:
+            return_list = ['Расписания нету!']
+        return return_list
 
 
     def rasp_data_get(self, schedule_data: list[str]) -> dict[int, dict]:
@@ -497,7 +505,7 @@ class Rasp:
 
     async def get_lessons_duration(self, group: int):
         rasp_data = self.rasp_parse(group, self.txt_dir, return_rasp_data=True)
-        if rasp_data == ['Расписания нету!']:
+        if rasp_data == ['Расписания нету!'] or rasp_data == ['<b>Выходной!</b>']:
             return None, None
         lessons_data = []
         for key in rasp_data.keys():
@@ -565,7 +573,7 @@ class Rasp:
             weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
             start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
             end_time = utils.get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
-            return f"<b>🕒 Время занятий:</b> {start_time} — {end_time}"
+            return f"\n<b>🕒 Время занятий:</b> {start_time} — {end_time}\n"
         else: return ''
 
     async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False, user_id: int = None):
@@ -583,11 +591,11 @@ class Rasp:
             f'{head_text}\n\n',
             f'{_rasp_text}\n',
         ]
-        if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}\n")
+        if self.show_lesson_time is False: main_text.extend(f"{await self.gen_rasp_footer_text(user_id, group)}")
         if sec_head_text != '' and _sec_rasp_text != '': 
             _list = [f'{sec_head_text}\n\n',f'{_sec_rasp_text}\n'] 
             main_text.extend(i for i in _list) 
-            if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}\n")
+            if self.show_lesson_time is False: main_text.extend(f"{await self.gen_rasp_footer_text(user_id, group)}")
         text = ''
         for i in main_text: text += i
         dateObj = datetime.strptime(self.date, "%d_%m_%Y").date()        
@@ -602,9 +610,12 @@ class Rasp:
             [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False, self.show_lesson_time)}"), 
              types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True, self.show_lesson_time)}"), 
              types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False, self.show_lesson_time)}")],
-            [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")],
-            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?{(reload_btn, self.show_lesson_time)}")]
         ]
+        if self.rasp_exists4group is True:
+            btns.append(
+                [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")]
+            )
+        btns.append([types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?{(reload_btn, self.show_lesson_time)}")])
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
@@ -629,7 +640,7 @@ class Rasp:
             except Exception:
                 continue
 
-            if not lines or "Расписания нету!" in lines:
+            if not lines or "Расписания нету!" in lines or "<b>Выходной!</b>" in lines:
                 continue
 
             
