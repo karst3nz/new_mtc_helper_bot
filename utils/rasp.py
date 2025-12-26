@@ -22,6 +22,7 @@ class Rasp:
         self.dateWyear = self.date.split('_')[:2][0] + "_" + self.date.split('_')[:2][1]
         self.rasp_exists = False
         self.rasp_exists4group = False
+        self.rasp_exists4secgroup = False
         self.rasp_file_exists = False
         self.excluded_subjects = ["v", "", "КураторскийЧас"]
         self.count_excluded_subjects = ["v", ""]
@@ -409,7 +410,10 @@ class Rasp:
                 self.logger.debug(f"Найдена секция группы {group} в файле")
                 rasp_list.append(line)
                 inside_classes = True
-                if self.group == group: self.rasp_exists4group = True
+                db = DB()
+                _group, sec_group = db.get_user_dataclass(self.user_id).group_id, db.get_user_dataclass(self.user_id).sec_group_id
+                if str(group) == str(_group): self.rasp_exists4group = True
+                if str(group) == str(sec_group): self.rasp_exists4secgroup = True
 
         if rasp_list:
             db = DB()
@@ -613,7 +617,7 @@ class Rasp:
              types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True, self.show_lesson_time)}"), 
              types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False, self.show_lesson_time)}")],
         ]
-        if self.rasp_exists4group is True:
+        if self.rasp_exists4group is True or self.rasp_exists4secgroup is True:
             btns.append(
                 [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")]
             )
