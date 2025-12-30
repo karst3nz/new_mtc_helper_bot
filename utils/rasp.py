@@ -578,7 +578,7 @@ class Rasp:
             weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
             start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
             end_time = utils.get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
-            return f"\n<b>🕒 Время занятий:</b> {start_time} — {end_time}\n"
+            return f"<b>🕒 Время занятий:</b> {start_time} — {end_time}\n"
         else: return ''
 
     async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False, user_id: int = None):
@@ -597,11 +597,11 @@ class Rasp:
             f'{head_text}\n\n',
             f'{_rasp_text}\n',
         ]
-        if self.show_lesson_time is False: main_text.extend(f"{await self.gen_rasp_footer_text(user_id, group)}")
+        if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}")
         if sec_head_text != '' and _sec_rasp_text != '': 
             _list = [f'{sec_head_text}\n\n',f'{_sec_rasp_text}\n'] 
             main_text.extend(i for i in _list) 
-            if self.show_lesson_time is False: main_text.extend(f"{await self.gen_rasp_footer_text(user_id, group)}")
+            if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}")
         text = ''
         for i in main_text: text += i
         dateObj = datetime.strptime(self.date, "%d_%m_%Y").date()        
@@ -718,7 +718,7 @@ class CheckRasp(Rasp):
         # Добавление информации о пропущенных часах
         missed_hours_added = False
         if "newRasp" in str(userDC.show_missed_hours_mode):
-            text += f"\n\n⏰ У тебя сейчас <b>{userDC.missed_hours}</b> пропущенных часов."
+            text += f"\n⏰ У тебя сейчас <b>{userDC.missed_hours}</b> пропущенных часов."
             missed_hours_added = True
             self.logger.debug(f"[SEND_RASP] Добавлена информация о пропущенных часах | Пользователь: {user} | Часов: {userDC.missed_hours}")
         
@@ -830,8 +830,10 @@ class CheckRasp(Rasp):
         self.logger.info(f"[CREATE_TASKS_CHANGE] Задачи изменений созданы | Режим: {mode} | Создано задач: {len(tasks)} | Пропущено дубликатов: {skipped_duplicates} | Всего пользователей: {total_users} | Длина diff: {diff_length} символов")
         return tasks
 
-    async def send_rasp_test(self):
-        tasks = self._create_tasks(mode="new-rasp")
+    async def send_rasp_test(self, mode):
+        db = DB()
+        user_groups = db.get_all_usersWgroup()
+        tasks = self._create_tasks(mode=mode, groups=user_groups)
         await asyncio.gather(*tasks)
 
     async def check_rasp_loop(self):
