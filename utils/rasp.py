@@ -601,7 +601,7 @@ class Rasp:
         if sec_head_text != '' and _sec_rasp_text != '': 
             _list = [f'{sec_head_text}\n\n',f'{_sec_rasp_text}\n'] 
             main_text.extend(i for i in _list) 
-            if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}")
+            if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, sec_group)}")
         text = ''
         for i in main_text: text += i
         dateObj = datetime.strptime(self.date, "%d_%m_%Y").date()        
