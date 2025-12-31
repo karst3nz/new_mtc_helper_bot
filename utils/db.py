@@ -292,7 +292,7 @@ class DB:
         for i in r: users.append(i[0])
         return users
 
-    def return_group_data(self, group: str):
+    async def return_group_data(self, group: str):
         if group not in config.groups: 
             return f"❌ Группа <b>{group}</b> не найдена в конфиге!"
         
@@ -301,18 +301,19 @@ class DB:
             return f"📭 В группе <b>{group}</b> нет пользователей."
         
         text = f"👥 Пользователи в группе <b>{group}</b> ({len(users)} чел.):\n"
-        text += "─" * 40 + "\n"
+        text += "─" * 20 + "\n"
         
         for idx, user_id in enumerate(users, start=1):
             user = self.get_user_dataclass(user_id)
-            username = user.tg_username if user.tg_username else "❓ Без username"
+            username = user.tg_username if user.tg_username else (await config.bot.get_chat(user.user_id)).full_name
+
             link_to_chat = f"tg://user?id={user.user_id}"
             link_to_info = f"/user {user.user_id}"
             # Форматирование с выравниванием
             if user.tg_username:
-                text += f"{idx:3d}. @{username} | ID: {user.user_id}\n"
+                text += f"{idx:2d}. @{username} | ID: <code>{user.user_id}</code>\n"
             else:
-                text += f"{idx:3d}. {username} | ID: {user.user_id}\n"
+                text += f"{idx:2d}. <a href='{link_to_chat}'>{username}</a> | ID: <code>{user.user_id}</code>\n"
         
         return text
 

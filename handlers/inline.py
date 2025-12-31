@@ -112,23 +112,29 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
         )
     else:
         # Пробуем разные варианты сигнатур
+        errors_stack = []
         try:
             text, btns = await menu(call.message.chat.id, *args, state)
         except Exception as e:
+            errors_stack.append(str(e))
             # logger.error(e)
             try:
                 text, btns = await menu(call.message.chat.id, *args)
             except Exception as e:
+                errors_stack.append(str(e))
                 # logger.error(e)
                 try:
                     text, btns = await menu(*args, state)
                 except Exception as e:
+                    errors_stack.append(str(e))
                     # logger.error(e)
                     try:
                         text, btns = await menu(call.message.chat.id, state)
                     except Exception as e:
+                        errors_stack.append(str(e))
+                        errors_stack_str = '\n'.join(f"{idx}. {i}" for idx, i in enumerate(errors_stack, start=1))
                         logger.error(e)
-                        text = f"❌ Не удалось загрузить меню. Ошибка <code>{str(e)}</code>"
+                        text = f"❌ Не удалось загрузить меню. Стэк ошибок:\n<code>{errors_stack_str}</code>"
                         btns = types.InlineKeyboardMarkup(
                             inline_keyboard=[[
                                 types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")

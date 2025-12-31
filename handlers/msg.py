@@ -86,7 +86,7 @@ async def db_user_info(msg: types.Message, state: FSMContext):
 async def db_group_info(msg: types.Message, state: FSMContext):
     db = DB()
     await state.clear()
-    text = db.return_group_data(str(msg.text))
+    text = await db.return_group_data(str(msg.text))
     btns = [
         [types.InlineKeyboardButton(text='< Назад', callback_data="menu:database")]
     ]

@@ -184,6 +184,7 @@ async def database(user_id: int, state: FSMContext):
 
     db_info_buttons = [
         [types.InlineKeyboardButton(text="📤 Выгрузить информацию по человеку", callback_data="menu:db_user")],
+        [types.InlineKeyboardButton(text="📤 Выгрузить информацию по группе", callback_data="menu:db_group")],
         [types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:admin")]
     ]
     reply_markup = types.InlineKeyboardMarkup(inline_keyboard=db_info_buttons)
@@ -194,6 +195,12 @@ async def db_user(user_id: int, state: FSMContext):
     await state.clear()
     await state.set_state(States.db_user_info)
     return '🔎 user_id?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
+
+@if_admin("user_id")
+async def db_group(user_id: int, state: FSMContext):
+    await state.clear()
+    await state.set_state(States.db_group_info)
+    return '🔎 group?', types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="< Назад", callback_data="menu:database")]])
 
 
 @if_admin("user_id")
