@@ -51,10 +51,18 @@ def db_backup():
         from utils.tg_db_backup import send_db_to_admin
         await send_db_to_admin()
 
-    # Бэкап в 3:00 ночи каждый день
+    async def update_users():
+        from utils.users_data_update import update
+        await update()
+
+    # Бэкап БД в 3:00 ночи каждый день
     crontab('0 3 * * *')(backup_job)
+
+    # Обновление данных в 4:00 ночи каждый день
+    crontab('0 4 * * *')(update_users)
+
     # Тестовый бэкап через 10 секунд после запуска
-    # crontab('*/10 * * * * *', start=True, loop=None)(backup_job)
+    # crontab('*/10 * * * * *', start=True, loop=None)(update_users)
 
 
 async def __init__():

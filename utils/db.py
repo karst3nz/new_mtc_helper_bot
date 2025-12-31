@@ -306,7 +306,7 @@ class DB:
         for idx, user_id in enumerate(users, start=1):
             user = self.get_user_dataclass(user_id)
             username = user.tg_username if user.tg_username else (await config.bot.get_chat(user.user_id)).full_name
-
+            if len(username) == 0: username = "Нет юзера"
             link_to_chat = f"tg://user?id={user.user_id}"
             link_to_info = f"/user {user.user_id}"
             # Форматирование с выравниванием
