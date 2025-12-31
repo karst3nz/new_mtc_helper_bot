@@ -182,3 +182,4 @@ config.ini
 *.tar.gz
 test_flies/
 .*
+*.binlog

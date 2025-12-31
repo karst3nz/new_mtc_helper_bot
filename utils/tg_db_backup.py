@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
 from config import *
+from utils.log import create_logger
+
+logger = create_logger(__name__)
 
 
 
 async def send_db_to_admin():
-    bot = Bot(token=BOT_TOKEN)
+    from config import bot
     import glob
     files = glob.glob(f"{db_DIR}/*.db")
     for file in files:
@@ -25,8 +28,8 @@ async def send_db_to_admin():
                 conn.close()
             caption = f"Пользователей в базе: {user_count}"
             await bot.send_document(chat_id=BACKUP_CHAT_ID, document=db_file, caption=caption)
-        finally:
-            await bot.session.close()
+        except Exception as e:
+            logger.error(f"Ошибка при отправке бэкапа БД: {e}")
 
 if __name__ == "__main__":
     asyncio.run(send_db_to_admin())
