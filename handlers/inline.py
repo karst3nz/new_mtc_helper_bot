@@ -14,7 +14,7 @@ async def ad1(call: types.CallbackQuery, state: FSMContext):
     import re
     import asyncio
 
-    async def send(user_id: int, msg2forward: types.Message, max_retries: int = 2):
+    async def send(user_id: int, msg2forward: types.Message, max_retries: int = 20):
         retry_count = 0
         while retry_count <= max_retries:
             try:
