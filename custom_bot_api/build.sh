@@ -1,0 +1,1 @@
+echo "Для создания BOT API перейди сюда - https://tdlib.github.io/telegram-bot-api/build.html?os=Linux"
