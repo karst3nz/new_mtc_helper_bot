@@ -11,17 +11,47 @@ logger = create_logger(__name__)
 @dp.callback_query(F.data.startswith("ad_"))
 @if_admin("call")
 async def ad1(call: types.CallbackQuery, state: FSMContext):
-    async def send(user_id: int, msg2forward: types.Message):
-        try:
-            await bot.send_message(
-                chat_id=user_id,
-                text=msg2forward.html_text
-            )
-            logger.info(f"Рассылка успешно отправлена к user_id={user_id}")
-            return True
-        except Exception as e:
-            logger.info(f"Рассылка не была отправлена к user_id={user_id}; e={str(e)}")
-            return False
+    import re
+    import asyncio
+
+    async def send(user_id: int, msg2forward: types.Message, max_retries: int = 20):
+        retry_count = 0
+        while retry_count <= max_retries:
+            try:
+                await msg2forward.forward(chat_id=user_id)
+                logger.info(f"Рассылка успешно отправлена к user_id={user_id}")
+                return True
+            except aiogram.exceptions.TelegramBadRequest as e:
+                # Неудачная попытка повторной отправки, не связанная с лимитом
+                logger.info(f"Рассылка не была отправлена к user_id={user_id}; e={str(e)} (BadRequest)")
+                return False
+            except aiogram.exceptions.TelegramRetryAfter as e:
+                # aiogram >= 3.0: TelegramRetryAfter содержит .retry_after
+                delay = getattr(e, "retry_after", None)
+                if delay is None:
+                    # Попробуем найти время ожидания через regex из текста ошибки
+                    m = re.search(r"Retry in (\d+) seconds", str(e))
+                    if m:
+                        delay = int(m.group(1))
+                    else:
+                        delay = 30  # fallback: 30 сек
+                logger.warning(f"Flood control (RetryAfter): ждем {delay} сек и повторим отправку user_id={user_id}")
+                await asyncio.sleep(delay)
+                retry_count += 1
+            except Exception as e:
+                # Дополнительно: ловим Too Many Requests через текст ошибки (если сработал raw exception)
+                text = str(e)
+                if isinstance(e, aiogram.exceptions.TelegramAPIError) and "Too Many Requests" in text:
+                    m = re.search(r"Retry in (\d+) seconds", text)
+                    delay = int(m.group(1)) if m else 30
+                    logger.warning(f"Flood control (APIError): ждем {delay} сек и повторим попытку user_id={user_id}")
+                    await asyncio.sleep(delay)
+                    retry_count += 1
+                    continue
+                logger.info(f"Рассылка не была отправлена к user_id={user_id}; e={text}")
+                return False
+        logger.info(f"Рассылка не удалась (max retries) к user_id={user_id}")
+        return False
 
     action = call.data.split("_")[1]
     state_data = await state.get_data()
@@ -112,23 +142,29 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
         )
     else:
         # Пробуем разные варианты сигнатур
+        errors_stack = []
         try:
             text, btns = await menu(call.message.chat.id, *args, state)
         except Exception as e:
+            errors_stack.append(str(e))
             # logger.error(e)
             try:
                 text, btns = await menu(call.message.chat.id, *args)
             except Exception as e:
+                errors_stack.append(str(e))
                 # logger.error(e)
                 try:
                     text, btns = await menu(*args, state)
                 except Exception as e:
+                    errors_stack.append(str(e))
                     # logger.error(e)
                     try:
                         text, btns = await menu(call.message.chat.id, state)
                     except Exception as e:
+                        errors_stack.append(str(e))
+                        errors_stack_str = '\n'.join(f"{idx}. {i}" for idx, i in enumerate(errors_stack, start=1))
                         logger.error(e)
-                        text = f"❌ Не удалось загрузить меню. Ошибка <code>{str(e)}</code>"
+                        text = f"❌ Не удалось загрузить меню. Стэк ошибок:\n<code>{errors_stack_str}</code>"
                         btns = types.InlineKeyboardMarkup(
                             inline_keyboard=[[
                                 types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")

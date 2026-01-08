@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from itertools import count
 import logging
 import os
 import tempfile
@@ -6,19 +7,30 @@ from typing import Literal
 import asyncio
 import aiohttp
 from aspose.cells import Workbook
+from utils import utils
 from utils.db import DB
 from utils.log import create_logger
 from config import *
 
 
 class Rasp:
-    def __init__(self, date: str = None, is_teacher: bool = False) -> None:
+    def __init__(self, date: str = None, is_teacher: bool = False, group: int = None) -> None:
         self.is_teacher = is_teacher
         self.logger = create_logger("Rasp")
         self.date = date if date is not None else datetime.today().date().strftime("%d_%m_%Y")
         self.logger.info(f"Инициализация Rasp с датой: {self.date}")
         self.dateWyear = self.date.split('_')[:2][0] + "_" + self.date.split('_')[:2][1]
         self.rasp_exists = False
+        self.rasp_exists4group = False
+        self.rasp_exists4secgroup = False
+        self.rasp_file_exists = False
+        self.excluded_subjects = ["v", "", "КураторскийЧас"]
+        self.count_excluded_subjects = ["v", ""]
+        self.half_subjects = ["ФаФизКулИздор."]
+        self.show_lesson_time: bool = False
+        self.user_id: int | None = None
+        self.group: int | None = None
+
         if not self.is_teacher:
             self.filename = f"PODNAM%20{self.dateWyear}.htm"
             self.txt_filename = f"{self.date}.txt"
@@ -189,6 +201,8 @@ class Rasp:
 
 
     async def check_diff(self):
+        prev_show_lesson_time = self.show_lesson_time
+        self.show_lesson_time = False
         from config import groups
         self.logger.info(f"[CHECK_DIFF] Начало проверки изменений | Дата: {self.date} | Групп для проверки: {len(groups)}")
         checkrasp = CheckRasp(self.date, self.is_teacher)
@@ -253,7 +267,7 @@ class Rasp:
             except Exception as e:
                 self.logger.error(f"[CHECK_DIFF] Ошибка проверки группы | Группа: {group} | Ошибка: {str(e)} | Тип: {type(e).__name__}")
                 continue
-        
+        self.show_lesson_time = prev_show_lesson_time
         self.logger.info(f"[CHECK_DIFF] Проверка завершена | Всего групп: {len(groups)} | Групп с изменениями: {groups_with_changes} | Общая длина diff: {total_diff_length} символов")
                 
 
@@ -352,15 +366,16 @@ class Rasp:
             return
         await self.convert_htm2txt(check_diff)
 
-    def rasp_parse(self, group, txt_dir: str = None): 
+    def rasp_parse(self, group, txt_dir: str = None, return_rasp_data: bool = False): 
         rasp_list = []
         rasp_list_done = []
         classes = [f"¦{group}¦"]
         txt_dir = txt_dir if txt_dir is not None else self.txt_dir
         if not os.path.isfile(txt_dir):
             self.logger.warning("Расписание не найдено: файл отсутствует %s", txt_dir)
+            self.rasp_file_exists = False
             return ['Расписания нету!']
-
+        self.rasp_file_exists = True
         try:
             with open(txt_dir, "r", encoding="windows-1251") as file:
                 content = file.read()
@@ -395,34 +410,67 @@ class Rasp:
                 self.logger.debug(f"Найдена секция группы {group} в файле")
                 rasp_list.append(line)
                 inside_classes = True
+                db = DB()
+                _group, sec_group = db.get_user_dataclass(self.user_id).group_id, db.get_user_dataclass(self.user_id).sec_group_id
+                if str(group) == str(_group): self.rasp_exists4group = True
+                if str(group) == str(sec_group): self.rasp_exists4secgroup = True
 
         if rasp_list:
+            db = DB()
+            smena = db.get_user_dataclass(self.user_id).smena
+            weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False   
             rasp_info = self.rasp_data_get(rasp_list)
+            prev_lesson_number = '  '  
+            if return_rasp_data is True: return rasp_info
             if isinstance(rasp_info, dict):
                 try:
                     lesson_number_to_lookup = max(item['lesson_id'] for item in rasp_info.values() if item['lesson_id'])
                     lesson_id = min(item['lesson_id'] for item in rasp_info.values() if item['lesson_id']) - 1
                 except ValueError:
                     self.logger.warning("Не удалось определить диапазон уроков для группы %s", group)
-                    return ['Расписания нету!']
-                
+                    return ['Расписания нету!'] 
+                           
                 while lesson_id < lesson_number_to_lookup:
                     lesson_id += 1
                     rasp_info_process = rasp_info.get(lesson_id)
-                    if rasp_info_process:
+                    
+                    if rasp_info_process and self.show_lesson_time is False:
                         rasp_list_done.append(
                             f"{rasp_info_process['lesson_number']} | {rasp_info_process['subject']} "
                             f"| {rasp_info_process['classroom_number']} | {rasp_info_process['teacher']}"
                         )
+                    elif rasp_info_process and self.show_lesson_time is True:
+                        lesson_number: str = rasp_info_process['lesson_number']
+
+                        if lesson_number == '  ' and prev_lesson_number != '  ' : lesson_number = prev_lesson_number
+                        elif lesson_number == '  '  and prev_lesson_number == '  ' : prev_lesson_number = lesson_number
+                        elif lesson_number != '  '  and lesson_number != prev_lesson_number: prev_lesson_number = lesson_number
+
+                        start_time = utils.get_lesson_time(lesson_number, start=True, weekday=weekday, smena=smena)
+                        end_time = utils.get_lesson_time(lesson_number, start=False, weekday=weekday, smena=smena)
+                        lesson_time = f"{start_time} — {end_time}"
+                        rasp_list_done.append(
+                            f"{lesson_time} | {rasp_info_process['lesson_number']} "
+                            f"| {rasp_info_process['subject']} | {rasp_info_process['classroom_number']} |"
+                        )
+                        prev_lesson_number = lesson_number
+
+
 
             return rasp_list_done
 
-        return ['Расписания нету!']
+        if self.rasp_file_exists is True and self.rasp_exists4group is False:
+            return_list = ['<b>Выходной!</b>']
+        elif self.rasp_file_exists is False:
+            return_list = ['Расписания нету!']
+        else:
+            return_list = ['Расписания нету!']
+        return return_list
 
 
     def rasp_data_get(self, schedule_data: list[str]) -> dict[int, dict]:
         schedule_info: dict[int, dict] = {}
-
+        prev_group_number = None
         for lesson_id, line in enumerate(schedule_data, start=1):
             parts = [part.strip() for part in line.split("¦")]
             if len(parts) < 6:
@@ -430,6 +478,11 @@ class Rasp:
                 continue
 
             group_number: str | None = parts[1] or None
+            ### Для адекватной записи номера группы в словарь, ранее если номера группы не было в line, то выводился None ###
+            if group_number is None and prev_group_number is not None: group_number = prev_group_number
+            elif group_number is None and prev_group_number is None: prev_group_number = group_number
+            elif group_number is not None and group_number != prev_group_number: prev_group_number = group_number
+            ###
             lesson_number_raw: str = parts[2]
             lesson_number: str = lesson_number_raw if lesson_number_raw else "  "
 
@@ -441,7 +494,6 @@ class Rasp:
                 "classroom_number": parts[4],
                 "teacher": parts[5],
             }
-
 
         return schedule_info
 
@@ -456,6 +508,33 @@ class Rasp:
         self.logger.debug(f"Длина итогового текста расписания для группы {group}: {len(result)} символов")
         return result
 
+    async def get_lessons_duration(self, group: int):
+        rasp_data = self.rasp_parse(group, self.txt_dir, return_rasp_data=True)
+        if rasp_data == ['Расписания нету!'] or rasp_data == ['<b>Выходной!</b>']:
+            return None, None
+        lessons_data = []
+        for key in rasp_data.keys():
+            key_data = rasp_data.get(key)
+            if key_data.get("lesson_number") != '  ':
+                lessons_data.append([key_data.get("lesson_number"), key_data.get("subject")])
+            else:
+                continue
+
+        def get_lesson_num(start=0, step=1):
+            num = None
+            for idx in count(start=start, step=step):
+                lesson = lessons_data[idx]
+                if lesson[1] in self.excluded_subjects:
+                    continue
+                else:
+                    num = lesson[0]
+                    break
+            return num
+
+        first_num = get_lesson_num(start=0, step=1)
+        last_num = get_lesson_num(start=len(lessons_data) - 1, step=-1)
+
+        return first_num, last_num
 
     @staticmethod
     def days_of_week(date: str):
@@ -490,7 +569,23 @@ class Rasp:
         else:
             return f'{footer.get(rasp_mode)}'
 
-    async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False):
+    async def gen_rasp_footer_text(self, user_id: int, group: str):
+        if self.show_lesson_time is False:
+            db = DB()
+            first_num, last_num = await self.get_lessons_duration(group)
+            if first_num is None and last_num is None: return ''
+            smena = db.get_user_dataclass(user_id).smena
+            weekday = True if datetime.strptime(self.date, "%d_%m_%Y").weekday() not in (5, 6) else False
+            start_time = utils.get_lesson_time(first_num, start=True, weekday=weekday, smena=smena)
+            end_time = utils.get_lesson_time(last_num, start=False, weekday=weekday, smena=smena)
+            return f"<b>🕒 Время занятий:</b> {start_time} — {end_time}\n"
+        else: return ''
+
+    async def create_rasp_msg(self, group: int, sec_group: int = None, _get_new: bool = False, user_id: int = None):
+        self.user_id = user_id
+        self.group = group
+        group = str(group)
+        head_text = self.gen_head_text(group, mode='None', rasp_mode="main")
         _rasp_text = await self.get_rasp(group, _get_new)
         sec_head_text = ''
         _sec_rasp_text = ''
@@ -498,23 +593,17 @@ class Rasp:
             self.logger.debug(f"Добавление второго расписания для группы {sec_group}")
             sec_head_text = self.gen_head_text(sec_group, mode='None', rasp_mode="sec")
             _sec_rasp_text += await self.get_rasp(sec_group, _get_new)
-        
-        head_text = self.gen_head_text(group, mode='None', rasp_mode="main")
-        if sec_head_text != '' and _sec_rasp_text != '':
-            text = f"""
-{head_text}
-
-{_rasp_text}
-{sec_head_text}
-
-{_sec_rasp_text}
-"""
-        else:
-            text = f"""
-{head_text}
-
-{_rasp_text}
-"""
+        main_text = [
+            f'{head_text}\n\n',
+            f'{_rasp_text}\n',
+        ]
+        if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, group)}")
+        if sec_head_text != '' and _sec_rasp_text != '': 
+            _list = [f'{sec_head_text}\n\n',f'{_sec_rasp_text}\n'] 
+            main_text.extend(i for i in _list) 
+            if self.show_lesson_time is False: main_text.extend(f"\n{await self.gen_rasp_footer_text(user_id, sec_group)}")
+        text = ''
+        for i in main_text: text += i
         dateObj = datetime.strptime(self.date, "%d_%m_%Y").date()        
         back_btn = (dateObj - timedelta(days=1)).strftime("%d_%m_%Y")
         reload_btn = dateObj.strftime("%d_%m_%Y")
@@ -524,23 +613,28 @@ class Rasp:
         if datetime.strptime(back_btn, "%d_%m_%Y").date().weekday() == 6:
             back_btn = (dateObj - timedelta(days=2)).strftime("%d_%m_%Y")
         btns = [
-            [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False)}"), 
-             types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True)}"), 
-             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False)}")],
-            [types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons")]
+            [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False, self.show_lesson_time)}"), 
+             types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True, self.show_lesson_time)}"), 
+             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False, self.show_lesson_time)}")],
         ]
+        if self.rasp_exists4group is True or self.rasp_exists4secgroup is True:
+            btns.append(
+                [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")]
+            )
+        btns.append([types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?{(reload_btn, self.show_lesson_time)}")])
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 
     def count_quantity_lessons(self, group: int):
         import glob
         from typing import Dict
+        self.group = group
+        prev_show_lesson_time = self.show_lesson_time
+        self.show_lesson_time = False
 
         def normalize_subject(raw: str) -> str:
             s = raw.replace(' ', '').replace('`', '').replace('"', '').replace("'", '')
             return s
-
-        excluded_subjects = {"v", "", "КураторскийЧас"}
 
         group_to_subject_counts: Dict[int, Dict[str, int]] = {}
 
@@ -550,10 +644,11 @@ class Rasp:
         for file in files:
             try:
                 lines: List[str] = self.rasp_parse(group, file)
-            except Exception:
+            except Exception as e:
+                self.logger.warning(e)
                 continue
 
-            if not lines or "Расписания нету!" in lines:
+            if not lines or "Расписания нету!" in lines or "<b>Выходной!</b>" in lines:
                 continue
 
             
@@ -571,7 +666,7 @@ class Rasp:
                     continue
 
                 subject = normalize_subject(subject_raw)
-                if subject in excluded_subjects:
+                if subject in self.excluded_subjects:
                     continue
 
                 lessons = group_to_subject_counts.setdefault(group, {})
@@ -579,7 +674,7 @@ class Rasp:
 
         if group not in group_to_subject_counts:
             return {}
-
+        self.show_lesson_time = prev_show_lesson_time
         return dict(sorted(group_to_subject_counts[group].items(), key=lambda x: x[1], reverse=True))
 
 
@@ -613,15 +708,17 @@ class CheckRasp(Rasp):
         content_length = len(rasp_text)
         preview = (rasp_text[:120] + '…') if content_length > 120 else rasp_text
         self.logger.debug(f"[SEND_RASP] Подготовка контента | Пользователь: {user} | Группа: {group} | Режим: {mode} | Длина: {content_length} символов | Превью: {preview}")
-        
-        # Формирование текста сообщения
-        text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}"
+
+        # Датаклассы
         userDC = db.get_user_dataclass(user)
         groupDC = db.get_TGgroup_dataclass(user)
+
+        # Формирование текста сообщения
+        text = f"{self.gen_head_text(group, mode=mode, rasp_mode='main')}\n\n{rasp_text}\n\n{await self.gen_rasp_footer_text(user_id=user, group=group)}"
         # Добавление информации о пропущенных часах
         missed_hours_added = False
         if "newRasp" in str(userDC.show_missed_hours_mode):
-            text += f"\n\n⏰ У тебя сейчас <b>{userDC.missed_hours}</b> пропущенных часов."
+            text += f"\n⏰ У тебя сейчас <b>{userDC.missed_hours}</b> пропущенных часов."
             missed_hours_added = True
             self.logger.debug(f"[SEND_RASP] Добавлена информация о пропущенных часах | Пользователь: {user} | Часов: {userDC.missed_hours}")
         
@@ -733,42 +830,47 @@ class CheckRasp(Rasp):
         self.logger.info(f"[CREATE_TASKS_CHANGE] Задачи изменений созданы | Режим: {mode} | Создано задач: {len(tasks)} | Пропущено дубликатов: {skipped_duplicates} | Всего пользователей: {total_users} | Длина diff: {diff_length} символов")
         return tasks
 
-    async def send_rasp_test(self):
-        tasks = self._create_tasks(mode="new-rasp")
+    async def send_rasp_test(self, mode):
+        db = DB()
+        user_groups = db.get_all_usersWgroup()
+        tasks = self._create_tasks(mode=mode, groups=user_groups)
         await asyncio.gather(*tasks)
 
     async def check_rasp_loop(self):
-        loop_count = 0
         self.logger.info(f"[CHECK_RASP_LOOP] Запуск цикла проверки расписания | Дата: {self.date}")
-        
-        while True:
-            loop_count += 1
-            self.logger.debug(f"[CHECK_RASP_LOOP] Итерация #{loop_count} | Дата: {self.date}")
-            
+        mode = "new-rasp" # new-rasp, rasp-change
+        try:
             await self.get()
+        except Exception as e:
+            self.logger.info(f"[CHECK_RASP_LOOP] Ошибка получения расписания | Ошибка: {e}")
             
-            if self.rasp_exists:
-                self.logger.debug(f"[CHECK_RASP_LOOP] Расписание получено | Итерация: #{loop_count} | Дата: {self.date}")
-                
-                if os.path.exists(self.base_txt_dir):
-                    self.logger.debug(f"[CHECK_RASP_LOOP] Базовая директория TXT существует | Итерация: #{loop_count} | Директория: {self.base_txt_dir} | Продолжение цикла без отправки")
-                    continue
-                else:
-                    self.logger.info(f"[CHECK_RASP_LOOP] Директория с TXT не найдена | Итерация: #{loop_count} | Запуск рассылки нового расписания")
-                    tasks = self._create_tasks(mode="new-rasp")
-                    
-                    if tasks:
-                        self.logger.info(f"[CHECK_RASP_LOOP] Выполнение рассылки | Итерация: #{loop_count} | Задач: {len(tasks)}")
-                        try:
-                            await asyncio.gather(*tasks)
-                            self.logger.info(f"[CHECK_RASP_LOOP] Рассылка завершена успешно | Итерация: #{loop_count} | Выполнено задач: {len(tasks)}")
-                        except Exception as e:
-                            self.logger.error(f"[CHECK_RASP_LOOP] Ошибка рассылки | Итерация: #{loop_count} | Ошибка: {str(e)} | Тип: {type(e).__name__}")
-                    else:
-                        self.logger.warning(f"[CHECK_RASP_LOOP] Нет задач для рассылки | Итерация: #{loop_count}")
+
+        if not self.rasp_exists:
+            self.logger.info(f"[CHECK_RASP_LOOP] Расписание недоступно | Дата: {self.date} | Причина: rasp_exists=False")
+        else:
+            self.logger.info(f"[CHECK_RASP_LOOP] Расписание получено | Дата: {self.date}")
+
+            if os.path.isfile(self.txt_dir):
+                self.logger.info(f"[CHECK_RASP_LOOP] TXT существует | Директория: {self.txt_dir} | Продолжение цикла без отправки")
             else:
-                self.logger.warning(f"[CHECK_RASP_LOOP] Расписание недоступно | Итерация: #{loop_count} | Дата: {self.date} | Причина: rasp_exists=False")
-                    
+                self.logger.info(f"[CHECK_RASP_LOOP] TXT не найден | Запуск рассылки нового расписания")
+                tasks = self._create_tasks(mode=mode)
+                if not tasks:
+                    self.logger.info(f"[CHECK_RASP_LOOP] Нет задач для рассылки")
+                else:
+                    self.logger.info(f"[CHECK_RASP_LOOP] Выполнение рассылки | Задач: {len(tasks)}")
+                    try:
+                        await asyncio.gather(*tasks)
+                        self.logger.info(f"[CHECK_RASP_LOOP] Рассылка завершена успешно | Выполнено задач: {len(tasks)}")
+                    except Exception as e:
+                        self.logger.info(f"[CHECK_RASP_LOOP] Ошибка рассылки | Ошибка: {str(e)} | Тип: {type(e).__name__}")
+
+        now = datetime.now().time()
+        is_peak = datetime.strptime("10:00", "%H:%M").time() <= now < datetime.strptime("15:00", "%H:%M").time()
+        sleep_seconds = 20 * 60 if is_peak else 60 * 60 # Раз в 15 мин / Раз в 60 мин
+        self.logger.info(f"[CHECK_RASP_LOOP] Сон перед следующей проверкой | Интервал: {sleep_seconds // 60} минут")
+        await asyncio.sleep(sleep_seconds)
+                
 
 
 async def main():

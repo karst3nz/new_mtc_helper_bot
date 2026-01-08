@@ -10,6 +10,7 @@ class User:
     sec_group_id: int
     missed_hours: int
     show_missed_hours_mode: Optional[str]  # может быть None, если в БД NULL
+    smena: str
 
 
 @dataclass

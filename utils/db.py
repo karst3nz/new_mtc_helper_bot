@@ -3,6 +3,7 @@ import sqlite3
 from typing import Literal
 from aiogram import types
 import os
+
 import config
 from utils.log import logging
 
@@ -51,6 +52,7 @@ class DB:
                 sec_group_id                INTEGER,
                 missed_hours                INTEGER,
                 show_missed_hours_mode      TEXT,
+                smena                       TEXT,
                 UNIQUE (user_id,tg_username) 
             )
         ''')
@@ -68,6 +70,7 @@ class DB:
         self.conn.commit()
 
         self.insert_column("pin_new_rasp", "groups", "BOOL", False)
+        self.insert_column("smena", "users", "TEXT", "1")
 
     def insert(self, user_id: int, tg_username: str, group_id: int, sec_group_id: int):
         """
@@ -75,9 +78,9 @@ class DB:
         """
         if self.is_exists(user_id) is False:
             self.cursor.execute(
-                'INSERT INTO users (user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode)'
-                'VALUES (?, ?, ?, ?, ?, ?)',
-                (user_id, tg_username, group_id, sec_group_id, 0, None))
+                'INSERT INTO users (user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode, smena)'
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (user_id, tg_username, group_id, sec_group_id, 0, None, "1"))
             self.conn.commit()
         from config import bot, ADMIN_ID
         user_text = (
@@ -237,11 +240,11 @@ class DB:
     def get_user_dataclass(self, user_id: int):
         from utils.dataclasses_ import User
         if self.is_exists(user_id):
-            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode, smena FROM users WHERE user_id = ?", (user_id,)).fetchone()
             user = User(*r)   
             return user
         else:
-            return User(None, None, None, None, None, None, None)
+            return User(None, None, None, None, None, None, None, None)
             
     def get_TGgroup_dataclass(self, id: int):
         from utils.dataclasses_ import TGgroup
@@ -289,7 +292,7 @@ class DB:
         for i in r: users.append(i[0])
         return users
 
-    def return_group_data(self, group: str):
+    async def return_group_data(self, group: str):
         if group not in config.groups: 
             return f"❌ Группа <b>{group}</b> не найдена в конфиге!"
         
@@ -298,18 +301,19 @@ class DB:
             return f"📭 В группе <b>{group}</b> нет пользователей."
         
         text = f"👥 Пользователи в группе <b>{group}</b> ({len(users)} чел.):\n"
-        text += "─" * 40 + "\n"
+        text += "─" * 20 + "\n"
         
         for idx, user_id in enumerate(users, start=1):
             user = self.get_user_dataclass(user_id)
-            username = user.tg_username if user.tg_username else "❓ Без username"
+            username = user.tg_username if user.tg_username else (await config.bot.get_chat(user.user_id)).full_name
+            if len(username) == 0: username = "Нет юзера"
             link_to_chat = f"tg://user?id={user.user_id}"
             link_to_info = f"/user {user.user_id}"
             # Форматирование с выравниванием
             if user.tg_username:
-                text += f"{idx:3d}. @{username} | ID: {user.user_id}\n"
+                text += f"{idx:2d}. @{username} | ID: <code>{user.user_id}</code>\n"
             else:
-                text += f"{idx:3d}. {username} | ID: {user.user_id}\n"
+                text += f"{idx:2d}. <a href='{link_to_chat}'>{username}</a> | ID: <code>{user.user_id}</code>\n"
         
         return text
 

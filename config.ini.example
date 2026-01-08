@@ -10,3 +10,11 @@ send_rasp = 1
 
 # Чат для бэкапа БД
 backup_chat_id = 
+
+# API_ID и API_HASH для кастомного BOT API сервера (получить можно в https://my.telegram.org/auth)
+api_id = 
+api_hash = 
+
+# URL кастомного Bot API сервера (опционально, если не указан - используется официальный API)
+# Пример: custom_api_url = http://127.0.0.1:8081
+custom_api_url = 
