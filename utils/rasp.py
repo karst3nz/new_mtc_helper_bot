@@ -633,49 +633,60 @@ class Rasp:
         self.show_lesson_time = False
 
         def normalize_subject(raw: str) -> str:
+            """Нормализует название предмета, удаляя пробелы и кавычки"""
             s = raw.replace(' ', '').replace('`', '').replace('"', '').replace("'", '')
             return s
 
-        group_to_subject_counts: Dict[int, Dict[str, int]] = {}
+        subject_counts: Dict[str, int] = {}
 
-        files = []
-        files.extend(glob.glob("data/txt/*.txt"))
+        files = glob.glob("data/txt/*.txt")
+        if not files:
+            self.logger.warning("Не найдено файлов расписания в data/txt/")
+            self.show_lesson_time = prev_show_lesson_time
+            return {}
 
-        for file in files:
+        for file_path in files:
             try:
-                lines: List[str] = self.rasp_parse(group, file)
+                # Используем return_rasp_data=True для получения структурированных данных
+                # Это более эффективно, чем парсить отформатированные строки
+                rasp_data = self.rasp_parse(group, file_path, return_rasp_data=True)
             except Exception as e:
-                self.logger.warning(e)
+                self.logger.warning(f"Ошибка при парсинге файла {file_path}: {e}")
                 continue
 
-            if not lines or "Расписания нету!" in lines or "<b>Выходной!</b>" in lines:
+            # Проверка на отсутствие расписания или выходной
+            if not rasp_data or not isinstance(rasp_data, dict):
                 continue
 
-            
-            for line in lines:
-                try:
-                    parts = [p.strip() for p in line.split('|')]
-                    if len(parts) < 2:
-                        continue
-                    lesson_number = parts[0]
-                    subject_raw = parts[1]
-                except Exception:
+            # Обрабатываем структурированные данные напрямую
+            for lesson_id, lesson_info in rasp_data.items():
+                lesson_number = lesson_info.get('lesson_number', '').strip()
+                subject_raw = lesson_info.get('subject', '').strip()
+
+                # Пропускаем уроки без номера (пустые строки)
+                if not lesson_number or lesson_number == '  ':
                     continue
 
-                if not lesson_number:
-                    continue
-
+                # Нормализуем название предмета
                 subject = normalize_subject(subject_raw)
+
+                # Пропускаем исключенные предметы
                 if subject in self.excluded_subjects:
                     continue
 
-                lessons = group_to_subject_counts.setdefault(group, {})
-                lessons[subject] = lessons.get(subject, 0) + 1
+                # Все пары считаются как 1, независимо от того, делятся ли они на подгруппы
+                # (согласно комментарию в menus.py: "Пары, которые разделяются на 2 подгруппы, 
+                # теперь считаются как 1 пара!")
+                subject_counts[subject] = subject_counts.get(subject, 0) + 1
 
-        if group not in group_to_subject_counts:
-            return {}
+        # Восстанавливаем предыдущее значение show_lesson_time
         self.show_lesson_time = prev_show_lesson_time
-        return dict(sorted(group_to_subject_counts[group].items(), key=lambda x: x[1], reverse=True))
+
+        if not subject_counts:
+            return {}
+
+        # Сортируем по убыванию количества пар
+        return dict(sorted(subject_counts.items(), key=lambda x: x[1], reverse=True))
 
 
 class CheckRasp(Rasp):

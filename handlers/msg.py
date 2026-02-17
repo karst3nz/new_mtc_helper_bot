@@ -101,7 +101,7 @@ async def ad_msg(msg: types.Message, state: FSMContext):
     await state.update_data(msg2forward=msg)
     msg2delete = []
     msg2delete.append(msg.message_id)
-    msg2delete.append((await msg.forward(chat_id=msg.from_user.id)).message_id)
+    msg2delete.append((await bot.send_message(chat_id=msg.from_user.id, text=msg.html_text, parse_mode="HTML")).message_id)
     btns = [
         [types.InlineKeyboardButton(text="Да", callback_data="ad_confirm"), types.InlineKeyboardButton(text="Нет", callback_data="ad_deny")]
     ]
@@ -114,7 +114,13 @@ async def ad_msg(msg: types.Message, state: FSMContext):
 async def add_missing_hours(msg: types.Message, state: FSMContext):
     await state.clear()
     db = DB()
-    db.cursor.execute(f"UPDATE users SET missed_hours = missed_hours + ? WHERE user_id = ?", (msg.text, msg.from_user.id)).connection.commit()
+    try:
+        hours_to_add = int(msg.text)
+    except ValueError:
+        await msg.answer("❌ Пожалуйста, введите число.")
+        return
+    db.cursor.execute("UPDATE users SET missed_hours = missed_hours + ? WHERE user_id = ?", (hours_to_add, msg.from_user.id))
+    db.conn.commit()
     user = db.get_user_dataclass(msg.from_user.id)
     btns = [
         [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
@@ -145,7 +151,8 @@ async def GROUP_change_group(msg: types.Message, state: FSMContext):
     state_data = await state.get_data()
     id = state_data["id"]
     db = DB()
-    db.cursor.execute(f'UPDATE groups SET "group" = ? WHERE id = ?', (msg.text, id)).connection.commit()
+    db.cursor.execute('UPDATE groups SET "group" = ? WHERE id = ?', (msg.text, id))
+    db.conn.commit()
     btns = [
         [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
     ]

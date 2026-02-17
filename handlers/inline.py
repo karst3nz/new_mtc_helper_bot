@@ -1,4 +1,3 @@
-from re import T
 import aiogram.exceptions
 from config import *
 from utils.log import create_logger
@@ -18,7 +17,8 @@ async def ad1(call: types.CallbackQuery, state: FSMContext):
         retry_count = 0
         while retry_count <= max_retries:
             try:
-                await msg2forward.forward(chat_id=user_id)
+                # await msg2forward.forward(chat_id=user_id)
+                await bot.send_message(chat_id=user_id, text=msg2forward.html_text, parse_mode="HTML")
                 logger.info(f"Рассылка успешно отправлена к user_id={user_id}")
                 return True
             except aiogram.exceptions.TelegramBadRequest as e:

@@ -29,11 +29,31 @@ db_DIR = "database/"
 read_config.read("config.ini") 
 
 config = read_config['config'] # Словарь с данными из config.ini
-BOT_TOKEN = config["bot_token"] if config["bot_token"] is not None else logger.error("Empty parameter for bot_token")
-DEBUG = config["DEBUG"] if config["DEBUG"] is not None else logger.error("Empty parameter for DEBUG, using False"); DEBUG=False
-ADMIN_ID = config["admin_id"] if config["admin_id"] is not None else logger.error("Empty parameter for admin_id")
-SEND_RASP = config["send_rasp"] if config["send_rasp"] is not None else logger.error("Empty parameter for send_rasp")
-BACKUP_CHAT_ID = config.get("backup_chat_id", ADMIN_ID) if config.get("backup_chat_id", None) is not None else logger.error("Пустое значение для backup_chat_id! Бэкапы отправляю в лс админу...")
+BOT_TOKEN = config.get("bot_token")
+if BOT_TOKEN is None:
+    logger.error("Empty parameter for bot_token")
+    raise ValueError("bot_token is required in config.ini")
+
+DEBUG = config.get("DEBUG", "False")
+if DEBUG is None:
+    logger.error("Empty parameter for DEBUG, using False")
+    DEBUG = "False"
+DEBUG = DEBUG.lower() in ("1", "true", "yes")
+
+ADMIN_ID = config.get("admin_id")
+if ADMIN_ID is None:
+    logger.error("Empty parameter for admin_id")
+    raise ValueError("admin_id is required in config.ini")
+
+SEND_RASP = config.get("send_rasp")
+if SEND_RASP is None:
+    logger.error("Empty parameter for send_rasp")
+    raise ValueError("send_rasp is required in config.ini")
+
+BACKUP_CHAT_ID = config.get("backup_chat_id", ADMIN_ID)
+if BACKUP_CHAT_ID is None:
+    logger.error("Пустое значение для backup_chat_id! Бэкапы отправляю в лс админу...")
+    BACKUP_CHAT_ID = ADMIN_ID
 API_ID = config.get("api_id")
 API_HASH = config.get("api_hash")
 # URL кастомного Bot API сервера (если не указан, используется официальный API)

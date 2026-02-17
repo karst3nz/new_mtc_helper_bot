@@ -1,5 +1,6 @@
 import sys
 import signal
+import asyncio
 from threading import Thread
 from config import *
 from utils.db import DB
@@ -177,7 +178,7 @@ async def __init__():
         # {"name": "удаление пользователей с неиспользуемыми ботом группами", "func": delete_users.run},
         {"name": "бота", "func": start_bot},
         {"name": "установку команд", "func": cmds},
-        {"name": "цикличную проверку расписания", "func": rasp_loop},
+        # {"name": "цикличную проверку расписания", "func": rasp_loop},
     ]
     for module in modules:
         print(f"Инициализирую {module['name']}... ", end='', flush=False)

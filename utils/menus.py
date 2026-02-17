@@ -79,14 +79,31 @@ async def skip_sec_group(user_id: int, state: FSMContext):
 
 async def settings(user_id: int, state: FSMContext):
     db = DB()
-    group, sec_group = db.get_user_groups(user_id)
+    userDC = db.get_user_dataclass(user_id)
+    group, sec_group = userDC.group_id, userDC.sec_group_id
     await state.clear()
-    text = f"⚙️ Настройки профиля\n\n📋 Основная группа: <b>{group}</b>"
-    if sec_group is not None:
-        text += f"\n📋 Дополнительная группа: <b>{sec_group}</b>"
-    else:
-        text += "\n📋 Дополнительная группа: <i>не указана</i>"
-    
+    smena_str = f"{userDC.smena}-ая" if userDC.smena else "<i>не указана</i>"
+    missed_hours_modes = {
+        "start": "В главном меню",
+        "rasp": "В просмотре расписания",
+        "newRasp": "В новом/измененном расписании"
+    }
+    def get_checkbox(mode):
+        return '✅' if mode in userDC.show_missed_hours_mode else '❌'
+
+    missed_hours_text = "\n".join(
+        [f"  • {desc} {get_checkbox(mode)}" for mode, desc in missed_hours_modes.items()]
+    )
+
+    text = (
+        "⚙️ <b>Настройки профиля</b>\n\n"
+        f"📋 <b>Основная группа:</b> <b>{group}</b>\n"
+        f"📋 <b>Дополнительная группа:</b> <b>{sec_group if sec_group is not None else '<i>не указана</i>'}</b>\n"
+        f"🔄 <b>Текущая смена:</b> <b>{smena_str}</b>\n"
+        f"⏰ <b>Отображение пропущенных часов:</b>\n"
+        f"{missed_hours_text}"
+    )
+ 
     btns = [
         [types.InlineKeyboardButton(text="✏️ Изменить основную группу", callback_data="menu:change_main_group")],
         [types.InlineKeyboardButton(text="✏️ Изменить доп. группу" if sec_group is not None else "➕ Добавить доп. группу", callback_data="menu:change_sec_group")],

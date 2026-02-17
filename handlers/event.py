@@ -23,12 +23,18 @@ async def bot_added_as_member(event: ChatMemberUpdated, state: FSMContext):
                 text=f'Я не могу писать сообщения в группу "{event.chat.title}". Предоставьте право писать сообщения'
             )
     else:
-        group = db.cursor.execute(f"SELECT \"group\" FROM groups WHERE id = ?", (event.chat.id,)).fetchone()
-        await event.answer(
-            text=f"Привет! 👋 Кажется, я уже был в этой беседе.\n"
-                 f"Ваш номер группы {group[0]}?\n"
-                 f"Если это не так, измените в настройках"
-        )
+        group_result = db.cursor.execute("SELECT \"group\" FROM groups WHERE id = ?", (event.chat.id,)).fetchone()
+        if group_result:
+            group = group_result[0]
+            await event.answer(
+                text=f"Привет! 👋 Кажется, я уже был в этой беседе.\n"
+                     f"Ваш номер группы {group}?\n"
+                     f"Если это не так, измените в настройках"
+            )
+        else:
+            await event.answer(
+                text="Привет! 👋 Кажется, я уже был в этой беседе, но группа не найдена в базе данных."
+            )
 
 
 
