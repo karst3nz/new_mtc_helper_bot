@@ -109,7 +109,7 @@ async def settings(user_id: int, state: FSMContext):
         "newRasp": "В новом/измененном расписании"
     }
     def get_checkbox(mode):
-        return '✅' if mode in userDC.show_missed_hours_mode else '❌'
+        return '✅' if userDC.show_missed_hours_mode and mode in userDC.show_missed_hours_mode else '❌'
 
     missed_hours_text = "\n".join(
         [f"  • {desc} {get_checkbox(mode)}" for mode, desc in missed_hours_modes.items()]
