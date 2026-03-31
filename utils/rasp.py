@@ -922,7 +922,98 @@ class CheckRasp(Rasp):
         sleep_seconds = 20 * 60 if is_peak else 60 * 60 # Раз в 15 мин / Раз в 60 мин
         self.logger.info(f"[CHECK_RASP_LOOP] Сон перед следующей проверкой | Интервал: {sleep_seconds // 60} минут")
         await asyncio.sleep(sleep_seconds)
-                
+
+
+async def check_next_schedules(days: int = 3) -> dict:
+    """
+    Проверяет наличие расписания на следующие N дней (исключая воскресенье)
+    
+    Args:
+        days: количество дней для проверки (по умолчанию 3)
+    
+    Returns:
+        dict: {
+            'checked_dates': list,  # список проверенных дат
+            'available': list,      # список дат с доступным расписанием
+            'missing': list,        # список дат без расписания
+            'total_checked': int,   # всего проверено дней
+            'total_available': int, # доступно расписаний
+            'total_missing': int    # отсутствует расписаний
+        }
+    """
+    logger = create_logger(__name__)
+    logger.info(f"[CHECK_NEXT_SCHEDULES] Начало проверки расписания на следующие {days} дней")
+    
+    checked_dates = []
+    available = []
+    missing = []
+    
+    current_date = datetime.now().date()
+    days_checked = 0
+    days_to_check = 0
+    
+    while days_checked < days:
+        days_to_check += 1
+        check_date = current_date + timedelta(days=days_to_check)
+        
+        # Пропускаем воскресенье (weekday() возвращает 6 для воскресенья)
+        if check_date.weekday() == 6:
+            logger.info(f"[CHECK_NEXT_SCHEDULES] Пропуск воскресенья: {check_date.strftime('%d.%m.%Y')}")
+            continue
+        
+        date_str = check_date.strftime("%d_%m_%Y")
+        date_display = check_date.strftime("%d.%m.%Y")
+        
+        try:
+            # Проверяем наличие файла расписания
+            txt_path = f"data/txt/{date_str}.txt"
+            
+            if os.path.exists(txt_path):
+                logger.info(f"[CHECK_NEXT_SCHEDULES] Расписание найдено: {date_display}")
+                available.append({
+                    'date': date_display,
+                    'date_str': date_str,
+                    'weekday': check_date.strftime('%A'),
+                    'path': txt_path
+                })
+            else:
+                logger.info(f"[CHECK_NEXT_SCHEDULES] Расписание отсутствует: {date_display}")
+                missing.append({
+                    'date': date_display,
+                    'date_str': date_str,
+                    'weekday': check_date.strftime('%A')
+                })
+            
+            checked_dates.append(date_display)
+            days_checked += 1
+            
+        except Exception as e:
+            logger.error(f"[CHECK_NEXT_SCHEDULES] Ошибка проверки {date_display}: {e}")
+            missing.append({
+                'date': date_display,
+                'date_str': date_str,
+                'weekday': check_date.strftime('%A'),
+                'error': str(e)
+            })
+            days_checked += 1
+    
+    result = {
+        'checked_dates': checked_dates,
+        'available': available,
+        'missing': missing,
+        'total_checked': len(checked_dates),
+        'total_available': len(available),
+        'total_missing': len(missing)
+    }
+    
+    logger.info(
+        f"[CHECK_NEXT_SCHEDULES] Проверка завершена | "
+        f"Проверено: {result['total_checked']} | "
+        f"Доступно: {result['total_available']} | "
+        f"Отсутствует: {result['total_missing']}"
+    )
+    
+    return result
 
 
 async def main():

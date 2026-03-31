@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from utils.db import DB
-from utils.rasp import Rasp
+from utils.rasp import Rasp, check_next_schedules
 from utils.log import create_logger
-from config import bot, groups
+from config import bot, groups, ADMIN_ID
 from utils import utils
 
 
@@ -44,6 +44,14 @@ class NotificationManager:
             self.check_hours_threshold,
             CronTrigger(hour=9, minute=0),
             id='hours_threshold'
+        )
+        
+        # Проверка наличия расписания на следующие 3 дня каждый час
+        self.scheduler.add_job(
+            self.check_upcoming_schedules,
+            'interval',
+            hours=1,
+            id='check_upcoming_schedules'
         )
         
         self.scheduler.start()
@@ -270,6 +278,32 @@ class NotificationManager:
         except Exception as e:
             self.logger.error(f"Ошибка отправки кастомного уведомления пользователю {user_id}: {e}")
             return False
+    
+    async def check_upcoming_schedules(self):
+        """Проверка наличия расписания на следующие 3 дня (исключая воскресенье)"""
+        self.logger.info("[CHECK_UPCOMING_SCHEDULES] Начало проверки расписания на следующие 3 дня")
+        
+        try:
+            result = await check_next_schedules(days=3)
+            
+            # Логируем результаты проверки
+            if result['total_missing'] > 0:
+                missing_dates = ", ".join([f"{item['date']} ({item['weekday']})" for item in result['missing']])
+                self.logger.warning(
+                    f"[CHECK_UPCOMING_SCHEDULES] Отсутствует расписание | "
+                    f"Даты: {missing_dates} | "
+                    f"Проверено: {result['total_checked']} | "
+                    f"Доступно: {result['total_available']} | "
+                    f"Отсутствует: {result['total_missing']}"
+                )
+            else:
+                self.logger.info(
+                    f"[CHECK_UPCOMING_SCHEDULES] Все расписания доступны | "
+                    f"Проверено: {result['total_checked']} дней"
+                )
+        
+        except Exception as e:
+            self.logger.error(f"[CHECK_UPCOMING_SCHEDULES] Ошибка проверки расписания: {e}")
 
 
 # Глобальный экземпляр менеджера уведомлений
