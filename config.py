@@ -4,9 +4,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from utils.log import create_logger
 import aiogram
-from aiogram.filters import CommandStart, Command
-from typing import List
-from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram import F
 from aiogram.fsm.context import FSMContext
 import asyncio
 from aiogram import types
@@ -19,45 +18,68 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env файла (если существует)
+load_dotenv()
 
 read_config = configparser.ConfigParser()
 dp = Dispatcher(storage=MemoryStorage())
 logger = create_logger(__name__)
 
+# Регистрация роутеров будет выполнена в main.py после импорта handlers
+
 db_DIR = "database/"
 
+# Пытаемся прочитать config.ini для обратной совместимости
 read_config.read("config.ini") 
 
-config = read_config['config'] # Словарь с данными из config.ini
-BOT_TOKEN = config.get("bot_token")
-if BOT_TOKEN is None:
-    logger.error("Empty parameter for bot_token")
-    raise ValueError("bot_token is required in config.ini")
+def get_config_value(key: str, default=None, required: bool = False):
+    """
+    Получает значение конфигурации из переменных окружения или config.ini.
+    Приоритет: переменные окружения > config.ini > default
+    """
+    # Сначала проверяем переменные окружения
+    env_value = os.getenv(key.upper())
+    if env_value is not None:
+        return env_value
+    
+    # Затем проверяем config.ini
+    if read_config.has_section('config'):
+        ini_value = read_config['config'].get(key)
+        if ini_value is not None:
+            return ini_value
+    
+    # Используем значение по умолчанию
+    if default is not None:
+        return default
+    
+    # Если параметр обязательный и не найден, выбрасываем ошибку
+    if required:
+        logger.error(f"Empty parameter for {key}")
+        raise ValueError(f"{key} is required in .env or config.ini")
+    
+    return None
 
-DEBUG = config.get("DEBUG", "False")
-if DEBUG is None:
-    logger.error("Empty parameter for DEBUG, using False")
-    DEBUG = "False"
+BOT_TOKEN = get_config_value("bot_token", required=True)
+
+DEBUG = get_config_value("DEBUG", "False")
 DEBUG = DEBUG.lower() in ("1", "true", "yes")
 
-ADMIN_ID = config.get("admin_id")
-if ADMIN_ID is None:
-    logger.error("Empty parameter for admin_id")
-    raise ValueError("admin_id is required in config.ini")
+ADMIN_ID = get_config_value("admin_id", required=True)
 
-SEND_RASP = config.get("send_rasp")
-if SEND_RASP is None:
-    logger.error("Empty parameter for send_rasp")
-    raise ValueError("send_rasp is required in config.ini")
+SEND_RASP = get_config_value("send_rasp", required=True)
 
-BACKUP_CHAT_ID = config.get("backup_chat_id", ADMIN_ID)
+BACKUP_CHAT_ID = get_config_value("backup_chat_id", ADMIN_ID)
 if BACKUP_CHAT_ID is None:
     logger.error("Пустое значение для backup_chat_id! Бэкапы отправляю в лс админу...")
     BACKUP_CHAT_ID = ADMIN_ID
-API_ID = config.get("api_id")
-API_HASH = config.get("api_hash")
+
+API_ID = get_config_value("api_id")
+API_HASH = get_config_value("api_hash")
+
 # URL кастомного Bot API сервера (если не указан, используется официальный API)
-CUSTOM_API_URL = config.get("custom_api_url", None)
+CUSTOM_API_URL = get_config_value("custom_api_url")
 
 groups = [
     "3191", "3395", "3195", "3196", "3391", "3393", "3491", "5111",

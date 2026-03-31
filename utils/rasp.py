@@ -6,11 +6,50 @@ import tempfile
 from typing import Literal
 import asyncio
 import aiohttp
+import json
 from aspose.cells import Workbook
 from utils import utils
 from utils.db import DB
 from utils.log import create_logger
-from config import *
+from utils.callback_data import CallbackData
+from config import bot, types, SEND_RASP, groups
+
+
+# Загрузка эмодзи для предметов
+def load_subject_emoji():
+    """Загрузить словарь эмодзи для предметов"""
+    try:
+        emoji_file = "data/subject_emoji.json"
+        if os.path.exists(emoji_file):
+            with open(emoji_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logging.error(f"Ошибка загрузки эмодзи: {e}")
+    return {}
+
+
+SUBJECT_EMOJI = load_subject_emoji()
+
+
+def add_emoji_to_subject(subject: str) -> str:
+    """Добавить эмодзи к названию предмета"""
+    if not subject or subject in ["v", "", "КураторскийЧас"]:
+        return subject
+    
+    # Убираем пробелы для поиска
+    subject_clean = subject.replace(" ", "").replace(".", "")
+    
+    # Ищем точное совпадение
+    if subject_clean in SUBJECT_EMOJI:
+        return f"{SUBJECT_EMOJI[subject_clean]} {subject}"
+    
+    # Ищем частичное совпадение
+    for key, emoji in SUBJECT_EMOJI.items():
+        if key.lower() in subject_clean.lower():
+            return f"{emoji} {subject}"
+    
+    # Возвращаем с дефолтным эмодзи
+    return f"{SUBJECT_EMOJI.get('default', '📝')} {subject}"
 
 
 class Rasp:
@@ -435,6 +474,7 @@ class Rasp:
                     rasp_info_process = rasp_info.get(lesson_id)
                     
                     if rasp_info_process and self.show_lesson_time is False:
+                        # subject_with_emoji = add_emoji_to_subject(rasp_info_process['subject'])
                         rasp_list_done.append(
                             f"{rasp_info_process['lesson_number']} | {rasp_info_process['subject']} "
                             f"| {rasp_info_process['classroom_number']} | {rasp_info_process['teacher']}"
@@ -449,6 +489,7 @@ class Rasp:
                         start_time = utils.get_lesson_time(lesson_number, start=True, weekday=weekday, smena=smena)
                         end_time = utils.get_lesson_time(lesson_number, start=False, weekday=weekday, smena=smena)
                         lesson_time = f"{start_time} — {end_time}"
+                        # subject_with_emoji = add_emoji_to_subject(rasp_info_process['subject'])
                         rasp_list_done.append(
                             f"{lesson_time} | {rasp_info_process['lesson_number']} "
                             f"| {rasp_info_process['subject']} | {rasp_info_process['classroom_number']} |"
@@ -613,15 +654,15 @@ class Rasp:
         if datetime.strptime(back_btn, "%d_%m_%Y").date().weekday() == 6:
             back_btn = (dateObj - timedelta(days=2)).strftime("%d_%m_%Y")
         btns = [
-            [types.InlineKeyboardButton(text="◀️", callback_data=f"menu:rasp?{(back_btn, False, self.show_lesson_time)}"), 
-             types.InlineKeyboardButton(text="🔄", callback_data=f"menu:rasp?{(reload_btn, True, self.show_lesson_time)}"), 
-             types.InlineKeyboardButton(text="▶️", callback_data=f"menu:rasp?{(next_btn, False, self.show_lesson_time)}")],
+            [types.InlineKeyboardButton(text="◀️", callback_data=CallbackData.encode("rasp", back_btn, False, self.show_lesson_time)), 
+             types.InlineKeyboardButton(text="🔄", callback_data=CallbackData.encode("rasp", reload_btn, True, self.show_lesson_time)), 
+             types.InlineKeyboardButton(text="▶️", callback_data=CallbackData.encode("rasp", next_btn, False, self.show_lesson_time))],
         ]
         if self.rasp_exists4group is True or self.rasp_exists4secgroup is True:
             btns.append(
-                [types.InlineKeyboardButton(text="✅ Отоброжать время пар" if self.show_lesson_time is True else "❌ Отоброжать время пар", callback_data=f"menu:rasp?{(self.date, False, not self.show_lesson_time)}")]
+                [types.InlineKeyboardButton(text="✅ Отображать время пар" if self.show_lesson_time is True else "❌ Отображать время пар", callback_data=CallbackData.encode("rasp", self.date, False, not self.show_lesson_time))]
             )
-        btns.append([types.InlineKeyboardButton(text="Пройденные пары", callback_data=f"menu:quantity_lessons?{(reload_btn, self.show_lesson_time)}")])
+        btns.append([types.InlineKeyboardButton(text="Пройденные пары", callback_data=CallbackData.encode("quantity_lessons", reload_btn, self.show_lesson_time))])
         self.logger.debug("Сформировано сообщение расписания и кнопки навигации")
         return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
 

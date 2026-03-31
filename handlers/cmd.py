@@ -1,5 +1,5 @@
 from datetime import datetime
-from config import *
+from config import dp, bot, types, Command, FSMContext, ADMIN_ID, groups
 from utils import menus
 from utils.log import create_logger
 from utils.db import DB

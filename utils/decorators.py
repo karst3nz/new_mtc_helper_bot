@@ -1,4 +1,4 @@
-from config import *
+from config import types, ADMIN_ID, groups
 from typing import Literal, Callable
 from functools import wraps
 

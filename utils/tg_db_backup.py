@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from config import *
+from config import bot, types, BACKUP_CHAT_ID, db_DIR
 from utils.log import create_logger
 
 logger = create_logger(__name__)

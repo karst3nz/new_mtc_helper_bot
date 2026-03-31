@@ -1,9 +1,13 @@
 import aiogram.exceptions
-from config import *
+from config import dp, bot, types, F, FSMContext
 from utils.log import create_logger
 from typing import Callable
 from utils.menus import *
-import ast
+from utils.db import DB
+from utils.decorators import if_admin
+from utils.calendar_keyboard import create_calendar, process_calendar_callback
+from utils.callback_data import CallbackData
+from utils.ui_constants import ButtonFactory
 logger = create_logger(__name__)
 
 
@@ -96,9 +100,56 @@ async def check_pin_rights(call: types.CallbackQuery):
     try: 
         await call.message.pin(disable_notification=True)
         await call.message.unpin()
-        await call.message.edit_text(text='✅ Права выданы верно!', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text='❌ Закрыть', callback_data='delete_msg')]]))
-    except:
-        await call.message.reply("❌ Проверка не удалась, проверьте права бота!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text='❌ Закрыть', callback_data='delete_msg')]]))
+        await call.message.edit_text(text='✅ Права выданы верно!', reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[ButtonFactory.close()]]))
+    except Exception as e:
+        from utils.log import create_logger
+        logger = create_logger(__name__)
+        logger.error(f"Permission check failed: {e}")
+        await call.message.reply("❌ Проверка не удалась, проверьте права бота!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[ButtonFactory.close()]]))
+
+
+@dp.callback_query(F.data.startswith("calendar:"))
+async def calendar_handler(call: types.CallbackQuery, state: FSMContext):
+    """Обработчик календаря"""
+    result = process_calendar_callback(call.data)
+    
+    if result["action"] == "ignore":
+        await call.answer()
+        return
+    
+    elif result["action"] == "change_month":
+        # Обновляем календарь на новый месяц
+        new_calendar = create_calendar(result["year"], result["month"])
+        try:
+            await call.message.edit_reply_markup(reply_markup=new_calendar)
+        except aiogram.exceptions.TelegramBadRequest:
+            pass
+        await call.answer()
+    
+    elif result["action"] == "select":
+        # Пользователь выбрал дату
+        date_str = result["date_str"]
+        
+        # Используем функцию rasp из menus.py для получения полного расписания
+        from utils.menus import rasp as get_rasp
+        
+        try:
+            # Получаем расписание через функцию menus.rasp
+            text, btns = await get_rasp(call.from_user.id, date=date_str, _get_new=False, show_lessons_time=False)
+            
+            await call.message.edit_text(text, reply_markup=btns, parse_mode="HTML", disable_web_page_preview=True)
+            await call.answer()
+        
+        except Exception as e:
+            logger.error(f"Error loading schedule from calendar: {e}")
+            await call.message.edit_text(
+                f"❌ Не удалось загрузить расписание\n\n💡 Попробуйте позже",
+                reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[
+                    types.InlineKeyboardButton(text="◀️ Назад к календарю", callback_data="menu:show_calendar")
+                ]])
+            )
+            await call.answer()
+
 
 @dp.callback_query(F.data == F.data)
 async def inline_handler(call: types.CallbackQuery, state: FSMContext):
@@ -112,70 +163,80 @@ async def inline_handler(call: types.CallbackQuery, state: FSMContext):
     if not call.data.startswith("menu:"):
         return
 
-    menu_data = call.data[len("menu:"):]
-    if "?" in menu_data:
-        menu_name, raw_args = menu_data.split("?", 1)
-        # В rare-case, когда строка заканчивается на "?", аргументов нет.
-        raw_args = raw_args.strip()
-        if raw_args:
-            try:
-                args = ast.literal_eval(raw_args)
-            except (ValueError, SyntaxError):
-                logger.warning("Не удалось спарсить аргументы: %s", raw_args)
-                args = ()
-        else:
-            args = ()
-    else:
-        menu_name, args = menu_data, ()
-
-    # Если parsed object не кортеж — превращаем в кортеж
-    if not isinstance(args, tuple):
-        args = (args,)
+    # Используем безопасную десериализацию
+    menu_name, args = CallbackData.decode(call.data)
 
     menu: Callable | None = globals().get(menu_name)
     if menu is None:
         text = "❌ Меню не найдено"
         btns = types.InlineKeyboardMarkup(
             inline_keyboard=[[
-                types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")
+                ButtonFactory.back("menu:start")
             ]]
         )
     else:
         # Пробуем разные варианты сигнатур
         errors_stack = []
+        result = None
         try:
-            text, btns = await menu(call.message.chat.id, *args, state)
+            result = await menu(call.message.chat.id, *args, state)
         except Exception as e:
             errors_stack.append(str(e))
-            # logger.error(e)
             try:
-                text, btns = await menu(call.message.chat.id, *args)
+                result = await menu(call.message.chat.id, *args)
             except Exception as e:
                 errors_stack.append(str(e))
-                # logger.error(e)
                 try:
-                    text, btns = await menu(*args, state)
+                    result = await menu(*args, state)
                 except Exception as e:
                     errors_stack.append(str(e))
-                    # logger.error(e)
                     try:
-                        text, btns = await menu(call.message.chat.id, state)
+                        result = await menu(call.message.chat.id, state)
                     except Exception as e:
                         errors_stack.append(str(e))
                         errors_stack_str = '\n'.join(f"{idx}. {i}" for idx, i in enumerate(errors_stack, start=1))
-                        logger.error(e)
-                        text = f"❌ Не удалось загрузить меню. Стэк ошибок:\n<code>{errors_stack_str}</code>"
+                        logger.error(f"Failed to load menu {menu_name}: {errors_stack_str}")
+                        text = (
+                            "❌ Не удалось загрузить меню\n\n"
+                            "💡 Попробуйте:\n"
+                            "• Вернуться в главное меню\n"
+                            "• Повторить попытку позже\n"
+                            "• Обратиться к администратору"
+                        )
                         btns = types.InlineKeyboardMarkup(
                             inline_keyboard=[[
-                                types.InlineKeyboardButton(text="◀️ Назад", callback_data="menu:start")
+                                ButtonFactory.back("menu:start")
                             ]]
                         )
-    try: await call.message.edit_text(
-        text=text,
-        reply_markup=btns,
-        parse_mode="HTML",
-        disable_web_page_preview=True,
-    )
+                        result = (text, btns)
+        
+        # Проверяем тип результата
+        if isinstance(result, dict):
+            # Специальный формат для фото/документов
+            if result.get("type") == "photo":
+                await call.message.answer_photo(
+                    photo=result["photo"],
+                    caption=result.get("caption", "")
+                )
+                await call.answer()
+                return
+            elif result.get("type") == "document":
+                await call.message.answer_document(
+                    document=result["document"],
+                    caption=result.get("caption", "")
+                )
+                await call.answer()
+                return
+        else:
+            text, btns = result
+    
+    try: 
+        await call.message.edit_text(
+            text=text,
+            reply_markup=btns,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
     except aiogram.exceptions.TelegramBadRequest:
         await call.answer("ℹ️ Нет изменений...")
     finally:

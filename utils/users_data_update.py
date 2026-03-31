@@ -1,4 +1,4 @@
-from config import *
+from config import bot, asyncio
 from utils.db import DB
 
 async def update():
@@ -11,5 +11,12 @@ async def update():
         if userTG.username != userDB.tg_username:
             db.update(user_id=user_id, column="tg_username", new_data=userTG.username, table=db.users_table)
     tasks = []
-    for user_id in users: tasks.append(task(user_id))
-    asyncio.gather(*tasks)
+    for user_id in users: 
+        tasks.append(task(user_id))
+    
+    try:
+        await asyncio.gather(*tasks)
+    except Exception as e:
+        from utils.log import create_logger
+        logger = create_logger(__name__)
+        logger.error(f"Error updating users data: {e}")

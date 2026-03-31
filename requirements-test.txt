@@ -1,0 +1,14 @@
+# Testing dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.11.0
+pytest-cov>=4.1.0
+pytest-timeout>=2.1.0
+
+# Main project dependencies (if not already in main requirements.txt)
+aiogram>=3.0.0
+aiohttp>=3.8.0
+python-dotenv>=1.0.0
+colorama>=0.4.6
+aspose-cells>=23.0.0
+aiocron>=1.8

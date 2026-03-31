@@ -139,6 +139,8 @@ def get_lesson_time(lesson_num: str, start: bool, weekday: bool, smena: str): # 
     times = shifts.smena1 if smena == "1" else shifts.smena2
     lesson_key = lesson_num if start else lesson_num + "/2"
     lesson = times.get(lesson_key)
+    if lesson is None:
+        return None
     return lesson.split(" ‒ ")[0] if start else lesson.split(" ‒ ")[1]
 
 

@@ -1,9 +1,10 @@
-from config import *
-
+from config import dp, bot, types, FSMContext, groups
+from utils.state import States
 from utils.db import DB
 from utils.log import create_logger
 from utils.menus import start
 from utils.decorators import check_group, if_admin
+from utils.ui_constants import ButtonFactory
 logger = create_logger(__name__)
 
 
@@ -76,7 +77,7 @@ async def db_user_info(msg: types.Message, state: FSMContext):
     await state.clear()
     text = db.return_user_data(str(msg.text))
     btns = [
-        [types.InlineKeyboardButton(text='< Назад', callback_data="menu:database")]
+        [ButtonFactory.back("menu:database")]
     ]
     await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
 
@@ -88,7 +89,7 @@ async def db_group_info(msg: types.Message, state: FSMContext):
     await state.clear()
     text = await db.return_group_data(str(msg.text))
     btns = [
-        [types.InlineKeyboardButton(text='< Назад', callback_data="menu:database")]
+        [ButtonFactory.back("menu:database")]
     ]
     await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
 
@@ -119,14 +120,46 @@ async def add_missing_hours(msg: types.Message, state: FSMContext):
     except ValueError:
         await msg.answer("❌ Пожалуйста, введите число.")
         return
+    
+    # Получаем текущее количество часов до обновления
+    user = db.get_user_dataclass(msg.from_user.id)
+    old_hours = int(user.missed_hours) if user.missed_hours else 0
+    
+    # Обновляем общий счетчик пропущенных часов
     db.cursor.execute("UPDATE users SET missed_hours = missed_hours + ? WHERE user_id = ?", (hours_to_add, msg.from_user.id))
     db.conn.commit()
+    
+    # Сохраняем в историю для аналитики и графиков
+    db.add_hours_history(msg.from_user.id, hours_to_add)
+    
+    # Получаем обновленные данные
     user = db.get_user_dataclass(msg.from_user.id)
+    new_hours = int(user.missed_hours) if user.missed_hours else 0
+    
     btns = [
-        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+        [ButtonFactory.close()]
     ]
     text = f"✅ Готово!\n\n⏰ Теперь у тебя пропущено {user.missed_hours}ч."
     await msg.answer(text=text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
+    
+    # Проверяем, нужно ли отправить уведомление о превышении порога
+    notification_settings = db.get_notification_settings(msg.from_user.id)
+    if notification_settings and notification_settings['hours_notification']:
+        threshold = notification_settings['hours_threshold']
+        last_notified = db.get_column(msg.from_user.id, "last_hours_notification", "notification_settings")
+        last_notified = int(last_notified) if last_notified else 0
+        
+        # Отправляем уведомление если превысили порог и это новое превышение
+        if new_hours >= threshold and new_hours > last_notified:
+            warning_text = (
+                f"⚠️ <b>Внимание!</b>\n\n"
+                f"У вас накопилось <b>{new_hours}</b> пропущенных часов.\n"
+                f"Это превышает установленный порог ({threshold} часов)."
+            )
+            await msg.answer(warning_text)
+            
+            # Обновляем значение последнего уведомления
+            db.update_notification_setting(msg.from_user.id, "last_hours_notification", new_hours)
 
 
 
@@ -139,7 +172,7 @@ async def GROUP_reg_group(msg: types.Message, state: FSMContext):
     db = DB()
     db.insert_group(id, user_id, msg.text)
     btns = [
-        [types.InlineKeyboardButton(text="❌ Закрыть", callback_data="delete_msg")]
+        [ButtonFactory.close()]
     ]
     await msg.reply(f"✅ Группа <b>{msg.text}</b> успешно установлена!", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=btns))
     await state.clear()

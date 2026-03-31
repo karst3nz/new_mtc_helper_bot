@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from colorama import Fore, Style, init
 
@@ -77,7 +78,15 @@ def create_logger(name: str = __name__, level: int = logging.INFO) -> logging.Lo
     console.setFormatter(ColorFormatter(fmt, datefmt=datefmt))
     import os
     path = Path(os.path.abspath(os.path.dirname(__file__)).replace("/utils", "/"), "app.log")
-    file_ = logging.FileHandler(path, encoding="windows-1251")
+    
+    # Используем RotatingFileHandler вместо обычного FileHandler
+    # Максимальный размер файла: 10MB, количество backup файлов: 5
+    file_ = RotatingFileHandler(
+        path, 
+        encoding="utf-8",  # Используем UTF-8 вместо windows-1251
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
     file_.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
 
     root = logging.getLogger()

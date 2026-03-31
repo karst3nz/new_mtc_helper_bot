@@ -1,26 +1,33 @@
-import sys
 import signal
 import asyncio
-from threading import Thread
-from config import *
+from config import bot, dp, types
 from utils.db import DB
-from handlers import msg, inline, cmd, event
+from handlers import msg, inline, cmd, event, quick_commands, inline_query
 from utils.log import create_logger
 from utils import check_groups, delete_users
 from utils.rasp import CheckRasp
+from utils.notifications import get_notification_manager
 
 
 
 def start_bot():
+    # Регистрируем роутеры из новых модулей
+    dp.include_router(quick_commands.router)
+    dp.include_router(inline_query.router)
     asyncio.create_task(dp.start_polling(bot, close_bot_session=False, handle_signals=False))
+
+def start_notifications():
+    """Запуск системы уведомлений"""
+    notification_manager = get_notification_manager()
+    notification_manager.start()
 
 
 def cmds():
     asyncio.create_task(bot.set_my_commands([
-        types.BotCommand(command="/start", description="🎓 Главное меню"),
-        types.BotCommand(command="/settings", description="⚙️ Настройки"),
-        types.BotCommand(command="/hours", description="⏰ Пропущенные часы"),
-        types.BotCommand(command="/lesson_schedule", description="🔔 Расписание звонков")
+        types.BotCommand(command="start", description="🎓 Главное меню"),
+        types.BotCommand(command="settings", description="⚙️ Настройки"),
+        types.BotCommand(command="hours", description="⏰ Пропущенные часы"),
+        types.BotCommand(command="lesson_schedule", description="🔔 Расписание звонков")
     ]))
 
 def create_dirs():
@@ -178,6 +185,7 @@ async def __init__():
         # {"name": "удаление пользователей с неиспользуемыми ботом группами", "func": delete_users.run},
         {"name": "бота", "func": start_bot},
         {"name": "установку команд", "func": cmds},
+        {"name": "систему уведомлений", "func": start_notifications},
         # {"name": "цикличную проверку расписания", "func": rasp_loop},
     ]
     for module in modules:
