@@ -6,12 +6,20 @@ from utils.rasp import Rasp
 from utils.log import create_logger
 from utils.db import DB
 from utils.state import States
+from utils.export import excel_exporter
 from datetime import datetime, timedelta
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from utils.utils import format_and_return_columns, get_lesson_time
 from utils.ui_constants import ButtonFactory, UIConstants
 from utils.callback_data import CallbackData
+from utils.admin_broadcast import get_broadcast_manager
+from utils.admin_user_manager import get_user_manager
+from utils.admin_analytics import get_analytics_manager
+from utils.admin_monitoring import get_system_monitor, get_quick_actions
+from utils.admin_logger import get_admin_logger, get_error_logger
+from utils.maintenance_mode import get_maintenance_mode
+from utils.admin_notifications import get_admin_notifications
 logger = create_logger(__name__)
 
 async def rasp(user_id: int, date: str = None, _get_new: bool = False, show_lessons_time: bool = False):
@@ -130,6 +138,7 @@ async def settings(user_id: int, state: FSMContext):
         [types.InlineKeyboardButton(text="🔄 Изменить смену", callback_data="menu:smena_edit")],
         [types.InlineKeyboardButton(text="⏰ Отображение пропущенных часов", callback_data="menu:missed_hours_mode")],
         [types.InlineKeyboardButton(text="🔔 Уведомления", callback_data="menu:notification_settings")],
+        # [types.InlineKeyboardButton(text="📥 Экспорт всех данных (PDF)", callback_data="menu:export_all_data")],
         [ButtonFactory.back("menu:start")]
     ]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
@@ -205,13 +214,30 @@ async def delete_sec_group_execute(user_id: int, state: FSMContext):
 
 @if_admin("user_id")
 async def admin(user_id: int, state: FSMContext):
-    text = "🛠️ ADMIN"
     await state.clear()
+    
+    # Получаем краткую статистику
+    db = DB()
+    total_users = len(db.get_all("user_id", db.users_table))
+    
+    text = "🛠️ <b>ПАНЕЛЬ АДМИНИСТРАТОРА</b>\n\n"
+    text += f"👥 Пользователей: <b>{total_users}</b>\n\n"
+    text += "Выберите раздел:"
+    
     btns = [
-        [types.InlineKeyboardButton(text="📢 Рассылка", callback_data="menu:ad")],
-        [types.InlineKeyboardButton(text="🗄️ База Данных", callback_data="menu:database")],
-        [types.InlineKeyboardButton(text="📥 Выгрузить расписания", callback_data="menu:download_schedules")],
-        [types.InlineKeyboardButton(text="🔔 Тест уведомлений", callback_data="menu:test_notifications")],
+        [
+            types.InlineKeyboardButton(text="📢 Рассылка", callback_data="menu:broadcast_main"),
+            types.InlineKeyboardButton(text="👥 Пользователи", callback_data="menu:users_management")
+        ],
+        [
+            types.InlineKeyboardButton(text="📊 Аналитика", callback_data="menu:analytics_main"),
+            types.InlineKeyboardButton(text="📝 Мониторинг", callback_data="menu:monitoring_main")
+        ],
+        [
+            types.InlineKeyboardButton(text="🗄️ База данных", callback_data="menu:database"),
+            types.InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:bot_settings")
+        ],
+        [types.InlineKeyboardButton(text="⚡ Быстрые действия", callback_data="menu:quick_actions")],
         [ButtonFactory.back("menu:start")]
     ]
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
@@ -1272,6 +1298,439 @@ async def check_scheduler_status(user_id: int, state: FSMContext):
     
     btns = [
         [ButtonFactory.back("menu:test_notifications")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+async def export_all_data(user_id: int, state: FSMContext):
+    """Экспорт всех данных пользователя в PDF"""
+    logger.info(f"Запрос экспорта всех данных от пользователя {user_id}")
+    
+    try:
+        # Генерируем PDF
+        filepath = await excel_exporter.export_all_user_data(user_id)
+        
+        # Возвращаем документ
+        from aiogram.types import FSInputFile
+        document = FSInputFile(filepath)
+        
+        return {
+            "type": "document",
+            "document": document,
+            "caption": (
+                "📥 <b>Экспорт всех данных</b>\n\n"
+                "Документ содержит:\n"
+                "• Основную информацию профиля\n"
+                "• Пропущенные часы\n"
+                "• Историю изменений\n"
+                "• Настройки уведомлений\n"
+                "• Статистику\n\n"
+                f"Дата создания: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+            )
+        }
+    
+    except Exception as e:
+        logger.error(f"Ошибка экспорта данных пользователя {user_id}: {e}", exc_info=True)
+        text = (
+            "❌ <b>Ошибка экспорта данных</b>\n\n"
+            f"Не удалось создать документ: {str(e)}\n\n"
+            "Попробуйте позже или обратитесь к администратору."
+        )
+        btns = [
+            [ButtonFactory.back("menu:settings")]
+        ]
+        return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+# ============================================================================
+# НОВЫЕ АДМИНСКИЕ МЕНЮ
+# ============================================================================
+
+# Рассылки
+@if_admin("user_id")
+async def broadcast_main(user_id: int, state: FSMContext):
+    """Главное меню рассылок"""
+    await state.clear()
+    
+    # Получаем статистику последних рассылок
+    from utils.admin_broadcast import get_broadcast_manager
+    broadcast_manager = get_broadcast_manager()
+    recent = broadcast_manager.get_broadcast_history(limit=1)
+    
+    text = "📢 <b>РАССЫЛКА</b>\n\n"
+    
+    if recent:
+        last = recent[0]
+        text += f"📊 Последняя рассылка:\n"
+        text += f"• Отправлено: {last['success_count']}/{last['total_users']}\n"
+        text += f"• Дата: {last['created_at'][:16]}\n\n"
+    
+    text += "Выберите действие:"
+    
+    btns = [
+        [types.InlineKeyboardButton(text="✉️ Создать рассылку", callback_data="menu:broadcast_create")],
+        [types.InlineKeyboardButton(text="📜 История рассылок", callback_data="menu:broadcast_history")],
+        [ButtonFactory.back("menu:admin")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def broadcast_create(user_id: int, state: FSMContext):
+    """Создание рассылки - выбор фильтра"""
+    await state.clear()
+    
+    text = "📢 <b>СОЗДАНИЕ РАССЫЛКИ</b>\n\nВыберите аудиторию:"
+    
+    btns = [
+        [types.InlineKeyboardButton(text="👥 Всем пользователям", callback_data="broadcast_filter:all")],
+        [types.InlineKeyboardButton(text="📚 По группам", callback_data="broadcast_filter:by_group")],
+        [types.InlineKeyboardButton(text="⚡ По активности", callback_data="broadcast_filter:by_activity")],
+        [types.InlineKeyboardButton(text="⏰ По пропускам", callback_data="broadcast_filter:by_hours")],
+        [types.InlineKeyboardButton(text="🧪 Тестовая (только мне)", callback_data="broadcast_filter:test")],
+        [ButtonFactory.back("menu:broadcast_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def broadcast_history(user_id: int, state: FSMContext):
+    """История рассылок"""
+    await state.clear()
+    
+    broadcast_manager = get_broadcast_manager()
+    broadcasts = broadcast_manager.get_broadcast_history(limit=10)
+    
+    text = broadcast_manager.format_broadcast_history(broadcasts)
+    
+    btns = [
+        [ButtonFactory.back("menu:broadcast_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+# Управление пользователями
+@if_admin("user_id")
+async def users_management(user_id: int, state: FSMContext):
+    """Главное меню управления пользователями"""
+    await state.clear()
+    
+    # Получаем статистику
+    db = DB()
+    total_users = len(db.get_all("user_id", db.users_table))
+    
+    # Считаем заблокированных
+    db.cursor.execute('SELECT COUNT(*) FROM users WHERE is_blocked = 1')
+    blocked_count = db.cursor.fetchone()[0]
+    
+    text = "👥 <b>УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ</b>\n\n"
+    text += f"📊 Всего: <b>{total_users}</b>\n"
+    text += f"🚫 Заблокировано: <b>{blocked_count}</b>\n\n"
+    text += "Выберите действие:"
+    
+    btns = [
+        [types.InlineKeyboardButton(text="🔍 Поиск пользователя", callback_data="menu:user_search")],
+        [types.InlineKeyboardButton(text="📊 Массовые операции", callback_data="menu:user_mass_operations")],
+        [ButtonFactory.back("menu:admin")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def user_search(user_id: int, state: FSMContext):
+    """Поиск пользователя"""
+    await state.set_state(States.admin_search_user)
+    
+    text = "🔍 <b>ПОИСК ПОЛЬЗОВАТЕЛЯ</b>\n\n"
+    text += "Отправьте:\n"
+    text += "• ID пользователя (например: 123456789)\n"
+    text += "• Username (например: @username)\n"
+    text += "• Номер группы (например: 3191)"
+    
+    btns = [
+        [ButtonFactory.back("menu:users_management")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def user_mass_operations(user_id: int, state: FSMContext):
+    """Массовые операции"""
+    await state.clear()
+    
+    text = "📊 <b>МАССОВЫЕ ОПЕРАЦИИ</b>\n\nВыберите действие:"
+    
+    btns = [
+        [types.InlineKeyboardButton(text="🗑️ Очистка неактивных", callback_data="menu:user_cleanup")],
+        [types.InlineKeyboardButton(text="📥 Экспорт в Excel", callback_data="menu:user_export")],
+        [ButtonFactory.back("menu:users_management")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+# Аналитика
+@if_admin("user_id")
+async def analytics_main(user_id: int, state: FSMContext):
+    """Главное меню аналитики"""
+    await state.clear()
+    
+    analytics_manager = get_analytics_manager()
+    metrics = analytics_manager.get_dashboard_metrics()
+    
+    text = analytics_manager.format_dashboard(metrics)
+    
+    btns = [
+        [types.InlineKeyboardButton(text="📈 Графики", callback_data="menu:analytics_charts")],
+        [types.InlineKeyboardButton(text="📥 Экспорт аналитики", callback_data="menu:analytics_export")],
+        [ButtonFactory.back("menu:admin")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def analytics_charts(user_id: int, state: FSMContext):
+    """Меню графиков"""
+    await state.clear()
+    
+    text = "📈 <b>ГРАФИКИ</b>\n\n"
+    text += "Выберите тип графика для просмотра:"
+    
+    btns = [
+        [
+            types.InlineKeyboardButton(text="📈 Рост пользователей", callback_data="chart:user_growth"),
+            types.InlineKeyboardButton(text="⚡ Активность", callback_data="chart:activity")
+        ],
+        [types.InlineKeyboardButton(text="📉 Распределение пропусков", callback_data="chart:hours_distribution")],
+        [ButtonFactory.back("menu:analytics_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+# Мониторинг
+@if_admin("user_id")
+async def monitoring_main(user_id: int, state: FSMContext):
+    """Главное меню мониторинга"""
+    await state.clear()
+    
+    # Получаем краткую статистику
+    from utils.admin_monitoring import get_system_monitor
+    system_monitor = get_system_monitor()
+    health = system_monitor.check_health()
+    
+    status_emoji = {
+        'healthy': '✅',
+        'warning': '⚠️',
+        'critical': '🚨',
+        'error': '❌'
+    }
+    
+    emoji = status_emoji.get(health['status'], '❓')
+    
+    text = "📝 <b>МОНИТОРИНГ</b>\n\n"
+    text += f"{emoji} Статус системы: <b>{health['status'].upper()}</b>\n\n"
+    text += "Выберите раздел:"
+    
+    btns = [
+        [
+            types.InlineKeyboardButton(text="📋 Логи", callback_data="menu:admin_logs"),
+            types.InlineKeyboardButton(text="⚠️ Ошибки", callback_data="menu:error_monitoring")
+        ],
+        [
+            types.InlineKeyboardButton(text="⚙️ Система", callback_data="menu:system_status"),
+            types.InlineKeyboardButton(text="✅ Здоровье", callback_data="menu:health_check")
+        ],
+        [ButtonFactory.back("menu:admin")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def admin_logs(user_id: int, state: FSMContext):
+    """Журнал действий администратора"""
+    await state.clear()
+    
+    admin_logger = get_admin_logger()
+    logs = admin_logger.get_logs(limit=20, days=7)
+    
+    text = admin_logger.format_logs_for_display(logs)
+    
+    btns = [
+        [types.InlineKeyboardButton(text="📥 Экспорт логов", callback_data="menu:logs_export")],
+        [ButtonFactory.back("menu:monitoring_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def error_monitoring(user_id: int, state: FSMContext):
+    """Мониторинг ошибок"""
+    await state.clear()
+    
+    error_logger = get_error_logger()
+    errors = error_logger.get_recent_errors(limit=10)
+    
+    text = error_logger.format_errors_for_display(errors)
+    text += "\n"
+    
+    # Добавляем статистику
+    stats = error_logger.get_error_stats(days=1)
+    text += f"\n<b>Статистика за 24 часа:</b>\n"
+    text += f"Всего ошибок: <b>{sum(stats.values())}</b>\n"
+    
+    btns = [
+        [types.InlineKeyboardButton(text="📊 Статистика ошибок", callback_data="menu:error_stats")],
+        [ButtonFactory.back("menu:monitoring_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def system_status(user_id: int, state: FSMContext):
+    """Статус системы"""
+    await state.clear()
+    
+    system_monitor = get_system_monitor()
+    status = system_monitor.get_system_status()
+    
+    text = system_monitor.format_system_status(status)
+    
+    # Добавляем статус планировщика
+    scheduler_status = system_monitor.check_scheduler_status()
+    text += "\n" + system_monitor.format_scheduler_status(scheduler_status)
+    
+    btns = [
+        [ButtonFactory.back("menu:monitoring_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def health_check(user_id: int, state: FSMContext):
+    """Проверка здоровья системы"""
+    await state.clear()
+    
+    system_monitor = get_system_monitor()
+    health = system_monitor.check_health()
+    
+    text = system_monitor.format_health_check(health)
+    
+    btns = [
+        [ButtonFactory.back("menu:monitoring_main")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+# Настройки бота
+@if_admin("user_id")
+async def bot_settings(user_id: int, state: FSMContext):
+    """Настройки бота"""
+    await state.clear()
+    
+    maintenance = get_maintenance_mode()
+    admin_notif = get_admin_notifications()
+    
+    text = "⚙️ <b>НАСТРОЙКИ БОТА</b>\n\n"
+    
+    # Режим обслуживания
+    maintenance_status = "✅ Включен" if maintenance.is_enabled() else "❌ Выключен"
+    text += f"<b>Режим обслуживания:</b> {maintenance_status}\n\n"
+    
+    # Уведомления админу
+    text += admin_notif.get_settings_text()
+    
+    btns = [
+        [types.InlineKeyboardButton(
+            text="🔧 Режим обслуживания",
+            callback_data="menu:toggle_maintenance"
+        )],
+        [types.InlineKeyboardButton(
+            text="🔔 Настройки уведомлений",
+            callback_data="menu:admin_notifications_settings"
+        )],
+        [ButtonFactory.back("menu:admin")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+@if_admin("user_id")
+async def admin_notifications_settings(user_id: int, state: FSMContext):
+    """Настройки уведомлений администратору"""
+    await state.clear()
+    
+    admin_notif = get_admin_notifications()
+    
+    text = admin_notif.get_settings_text()
+    text += "\n\n💡 Используйте кнопки ниже для изменения настроек:"
+    
+    # Получаем текущие настройки
+    enabled = admin_notif.is_enabled()
+    
+    btns = [
+        [types.InlineKeyboardButton(
+            text=f"{'✅' if enabled else '❌'} Уведомления {'включены' if enabled else 'выключены'}",
+            callback_data="toggle_admin_notif:main"
+        )],
+        [types.InlineKeyboardButton(
+            text="🚨 Критические ошибки",
+            callback_data="toggle_admin_notif:critical_errors"
+        )],
+        [types.InlineKeyboardButton(
+            text="👤 Новые пользователи",
+            callback_data="toggle_admin_notif:new_users"
+        )],
+        [types.InlineKeyboardButton(
+            text="⚠️ Превышение порога ошибок",
+            callback_data="toggle_admin_notif:error_threshold"
+        )],
+        [types.InlineKeyboardButton(
+            text="📅 Проблемы с расписанием",
+            callback_data="toggle_admin_notif:schedule_problems"
+        )],
+        [types.InlineKeyboardButton(
+            text="💿 Заполнение диска",
+            callback_data="toggle_admin_notif:disk_space"
+        )],
+        [ButtonFactory.back("menu:bot_settings")]
+    ]
+    
+    return text, types.InlineKeyboardMarkup(inline_keyboard=btns)
+
+
+# Быстрые действия
+@if_admin("user_id")
+async def quick_actions(user_id: int, state: FSMContext):
+    """Быстрые действия"""
+    await state.clear()
+    
+    text = "⚡ <b>БЫСТРЫЕ ДЕЙСТВИЯ</b>\n\n"
+    text += "Выполнение системных операций:"
+    
+    btns = [
+        [
+            types.InlineKeyboardButton(text="🔄 Перезапуск планировщика", callback_data="quick:restart_scheduler"),
+            types.InlineKeyboardButton(text="🗑️ Очистить кэш", callback_data="quick:clear_cache")
+        ],
+        [
+            types.InlineKeyboardButton(text="📥 Обновить расписания", callback_data="quick:update_schedules"),
+            types.InlineKeyboardButton(text="✅ Проверить статус", callback_data="quick:check_status")
+        ],
+        [types.InlineKeyboardButton(text="🔔 Тестовое уведомление", callback_data="quick:test_notification")],
+        [ButtonFactory.back("menu:admin")]
     ]
     
     return text, types.InlineKeyboardMarkup(inline_keyboard=btns)

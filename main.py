@@ -2,15 +2,22 @@ import signal
 import asyncio
 from config import bot, dp, types
 from utils.db import DB
-from handlers import msg, inline, cmd, event, quick_commands, inline_query
+from handlers import msg, cmd, event, quick_commands, inline_query, admin_handlers, inline
 from utils.log import create_logger
 from utils import check_groups, delete_users
-from utils.rasp import CheckRasp
+from utils.rasp import CheckRasp, check_next_schedules
 from utils.notifications import get_notification_manager
+from utils.middleware import MaintenanceMiddleware, UserActivityMiddleware
 
 
 
 def start_bot():
+    # Регистрируем middleware для проверки режима обслуживания
+    dp.update.middleware(MaintenanceMiddleware())
+    
+    # Регистрируем middleware для логирования активности пользователей
+    dp.update.middleware(UserActivityMiddleware())
+    
     # Регистрируем роутеры из новых модулей
     dp.include_router(quick_commands.router)
     dp.include_router(inline_query.router)
@@ -186,7 +193,6 @@ async def __init__():
         {"name": "бота", "func": start_bot},
         {"name": "установку команд", "func": cmds},
         {"name": "систему уведомлений", "func": start_notifications},
-        # {"name": "цикличную проверку расписания", "func": rasp_loop},
     ]
     for module in modules:
         print(f"Инициализирую {module['name']}... ", end='', flush=False)

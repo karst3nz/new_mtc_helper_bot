@@ -1,15 +1,40 @@
 """
-Модуль экспорта данных в Excel
+Модуль экспорта данных в Excel и PDF
 """
 import os
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from utils.db import DB
 from utils.log import create_logger
 
 logger = create_logger(__name__)
+
+# Регистрация шрифтов Liberation для поддержки кириллицы
+try:
+    pdfmetrics.registerFont(TTFont('Liberation', '/usr/share/fonts/liberation/LiberationSerif-Regular.ttf'))
+    pdfmetrics.registerFont(TTFont('Liberation-Bold', '/usr/share/fonts/liberation/LiberationSerif-Bold.ttf'))
+    FONT_NAME = 'Liberation'
+    logger.info("Шрифт Liberation успешно зарегистрирован")
+except Exception as e:
+    logger.warning(f"Не удалось загрузить Liberation: {e}, пробуем DejaVu")
+    try:
+        pdfmetrics.registerFont(TTFont('DejaVu', '/usr/share/fonts/TTF/DejaVuSerif.ttf'))
+        pdfmetrics.registerFont(TTFont('DejaVu-Bold', '/usr/share/fonts/TTF/DejaVuSerif-Bold.ttf'))
+        FONT_NAME = 'DejaVu'
+        logger.info("Шрифт DejaVu успешно зарегистрирован")
+    except Exception as e2:
+        logger.error(f"Не удалось загрузить шрифты: {e2}")
+        FONT_NAME = 'Helvetica'
 
 
 class ExcelExporter:
@@ -219,6 +244,208 @@ class ExcelExporter:
         
         except Exception as e:
             logger.error(f"Ошибка экспорта истории изменений: {e}")
+            raise
+    
+    async def export_all_user_data(self, user_id: int) -> str:
+        """
+        Экспорт ВСЕХ данных пользователя в PDF документ
+        Включает: профиль, настройки, историю часов, уведомления
+        Возвращает путь к созданному файлу
+        """
+        logger.info(f"Экспорт всех данных для пользователя {user_id}")
+        
+        try:
+            # Получаем все данные пользователя
+            user_data = self.db.get_user_dataclass(user_id)
+            if not user_data:
+                raise ValueError(f"Пользователь {user_id} не найден")
+            
+            # Получаем дополнительные данные
+            hours_history = self.db.get_hours_history(user_id, days=365)  # За год
+            notification_settings = self.db.get_notification_settings(user_id)
+            
+            # Создаем PDF
+            filename = f"user_data_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            filepath = os.path.join("data", filename)
+            os.makedirs("data", exist_ok=True)
+            
+            doc = SimpleDocTemplate(filepath, pagesize=A4)
+            story = []
+            
+            # Стили - переопределяем с нашим шрифтом
+            styles = getSampleStyleSheet()
+            
+            from reportlab.lib.styles import ParagraphStyle
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Title'],
+                fontName=FONT_NAME,
+                fontSize=18,
+                leading=22
+            )
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontName=FONT_NAME,
+                fontSize=14,
+                leading=18
+            )
+            normal_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Normal'],
+                fontName=FONT_NAME,
+                fontSize=10,
+                leading=14
+            )
+            
+            # Заголовок документа
+            story.append(Paragraph("Экспорт данных пользователя", title_style))
+            story.append(Paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}", normal_style))
+            story.append(Spacer(1, 0.5*cm))
+            
+            # 1. Основная информация
+            story.append(Paragraph("1. Основная информация", heading_style))
+            profile_data = [
+                ['Параметр', 'Значение'],
+                ['User ID', str(user_data.user_id)],
+                ['Username', user_data.tg_username or 'Не указан'],
+                ['Группа', str(user_data.group_id) if user_data.group_id else 'Не указана'],
+                ['Доп. группа', str(user_data.sec_group_id) if user_data.sec_group_id else 'Не указана'],
+                ['Смена', str(user_data.smena) if user_data.smena else 'Не указана'],
+            ]
+            
+            profile_table = Table(profile_data, colWidths=[8*cm, 10*cm])
+            profile_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), FONT_NAME),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            story.append(profile_table)
+            story.append(Spacer(1, 0.5*cm))
+            
+            # 2. Пропущенные часы
+            story.append(Paragraph("2. Пропущенные часы", heading_style))
+            hours_data = [
+                ['Параметр', 'Значение'],
+                ['Текущие пропуски', str(user_data.missed_hours or 0)],
+                ['Режим отображения', user_data.show_missed_hours_mode or 'Не настроен'],
+            ]
+            
+            hours_table = Table(hours_data, colWidths=[8*cm, 10*cm])
+            hours_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), FONT_NAME),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            story.append(hours_table)
+            story.append(Spacer(1, 0.5*cm))
+            
+            # 3. История изменений
+            if hours_history:
+                story.append(Paragraph(f"3. История ({len(hours_history)} записей)", heading_style))
+                
+                history_data = [['№', 'Дата', 'Часы']]
+                for idx, record in enumerate(hours_history[:50], 1):
+                    date_val = record[0]
+                    hours_val = record[1]
+                    history_data.append([str(idx), date_val, str(hours_val)])
+                
+                history_table = Table(history_data, colWidths=[2*cm, 6*cm, 6*cm])
+                history_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, -1), FONT_NAME),
+                    ('FONTSIZE', (0, 0), (-1, 0), 11),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+                story.append(history_table)
+                story.append(Spacer(1, 0.5*cm))
+            else:
+                story.append(Paragraph("3. История отсутствует", heading_style))
+                story.append(Spacer(1, 0.5*cm))
+            
+            # 4. Настройки уведомлений
+            story.append(Paragraph("4. Настройки уведомлений", heading_style))
+            if notification_settings:
+                notif_data = [
+                    ['Параметр', 'Значение'],
+                    ['Ежедневное расписание', 'Да' if notification_settings.get('daily_schedule') else 'Нет'],
+                    ['Время отправки', notification_settings.get('daily_schedule_time', 'Не настроено')],
+                    ['Напоминания о парах', 'Да' if notification_settings.get('lesson_reminder') else 'Нет'],
+                    ['За сколько минут', str(notification_settings.get('lesson_reminder_minutes', '-'))],
+                    ['Уведомления о пропусках', 'Да' if notification_settings.get('hours_notification') else 'Нет'],
+                    ['Порог пропусков', str(notification_settings.get('hours_threshold', '-'))],
+                ]
+                
+                notif_table = Table(notif_data, colWidths=[8*cm, 10*cm])
+                notif_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, -1), FONT_NAME),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+                story.append(notif_table)
+            else:
+                story.append(Paragraph("Настройки не найдены", normal_style))
+            
+            story.append(Spacer(1, 0.5*cm))
+            
+            # 5. Статистика
+            story.append(Paragraph("5. Статистика", heading_style))
+            stats_data = [
+                ['Параметр', 'Значение'],
+                ['Всего записей', str(len(hours_history))],
+                ['Максимум', str(max([r[1] for r in hours_history], default=0))],
+                ['Минимум', str(min([r[1] for r in hours_history], default=0))],
+            ]
+            
+            stats_table = Table(stats_data, colWidths=[8*cm, 10*cm])
+            stats_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), FONT_NAME),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            story.append(stats_table)
+            
+            # Футер
+            story.append(Spacer(1, 1*cm))
+            story.append(Paragraph("--- MTC Helper Bot ---", normal_style))
+            
+            # Сохранение PDF
+            doc.build(story)
+            logger.info(f"PDF файл успешно создан: {filepath}")
+            
+            return filepath
+        
+        except Exception as e:
+            logger.error(f"Ошибка экспорта всех данных пользователя: {e}", exc_info=True)
             raise
 
 

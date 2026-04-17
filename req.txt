@@ -17,3 +17,5 @@ aiogram-calendar
 structlog
 python-json-logger
 aiohttp
+reportlab
+psutil

@@ -40,6 +40,7 @@ def if_admin(type: Literal["msg", "call", "user_id"]):
             elif type == "call":
                 call: types.CallbackQuery = args[0]
                 if str(call.from_user.id) != str(ADMIN_ID):
+                    await call.answer("❌ Доступ запрещен", show_alert=True)
                     return
                 return await func(*args, **kwargs)
             elif type == "user_id":

@@ -13,13 +13,18 @@ class DB:
     users_table = "users"
     
     # Whitelist для безопасных имен таблиц и колонок
-    ALLOWED_TABLES = {"users", "groups", "notification_settings", "hours_history", "schedule_changes", "favorites"}
+    ALLOWED_TABLES = {"users", "groups", "notification_settings", "hours_history", "schedule_changes", "favorites",
+                      "admin_logs", "broadcasts", "user_activity", "blocked_users", "system_errors", "bot_settings"}
     ALLOWED_COLUMNS = {
         "id", "user_id", "tg_username", "group_id", "sec_group_id", 
         "missed_hours", "show_missed_hours_mode", "smena", "group", "pin_new_rasp",
         "daily_schedule", "daily_schedule_time", "lesson_reminder", "lesson_reminder_minutes",
         "hours_threshold", "hours_notification", "hours", "date", "diff_text", "created_at",
-        "action", "position", "last_hours_notification"
+        "action", "position", "last_hours_notification", "last_activity", "is_blocked",
+        "admin_id", "target_id", "details", "timestamp", "message_text", "filter_type",
+        "filter_params", "total_users", "success_count", "error_count", "status", "completed_at",
+        "blocked_by", "reason", "blocked_at", "error_type", "error_message", "traceback",
+        "key", "value", "updated_at"
     }
 
     def __init__(self):
@@ -138,9 +143,91 @@ class DB:
         ''')
         self.conn.commit()
 
+        # Таблица логов действий администратора
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS admin_logs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id    INTEGER NOT NULL,
+                action      TEXT NOT NULL,
+                target_id   INTEGER,
+                details     TEXT,
+                timestamp   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        self.conn.commit()
+
+        # Таблица истории рассылок
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS broadcasts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id        INTEGER NOT NULL,
+                message_text    TEXT NOT NULL,
+                filter_type     TEXT,
+                filter_params   TEXT,
+                total_users     INTEGER,
+                success_count   INTEGER DEFAULT 0,
+                error_count     INTEGER DEFAULT 0,
+                status          TEXT DEFAULT 'pending',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at    TIMESTAMP
+            )
+        ''')
+        self.conn.commit()
+
+        # Таблица активности пользователей
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                action      TEXT NOT NULL,
+                details     TEXT,
+                timestamp   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        ''')
+        self.conn.commit()
+
+        # Таблица заблокированных пользователей
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                user_id     INTEGER PRIMARY KEY,
+                blocked_by  INTEGER NOT NULL,
+                reason      TEXT,
+                blocked_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        ''')
+        self.conn.commit()
+
+        # Таблица системных ошибок
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS system_errors (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                error_type      TEXT NOT NULL,
+                error_message   TEXT NOT NULL,
+                traceback       TEXT,
+                user_id         INTEGER,
+                timestamp       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        self.conn.commit()
+
+        # Таблица настроек бота
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bot_settings (
+                key         TEXT PRIMARY KEY,
+                value       TEXT NOT NULL,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        self.conn.commit()
+
         self.insert_column("pin_new_rasp", "groups", "BOOL", False)
         self.insert_column("smena", "users", "TEXT", "1")
         self.insert_column("last_hours_notification", "notification_settings", "INTEGER", 0)
+        self.insert_column("created_at", "users", "TIMESTAMP", None)
+        self.insert_column("last_activity", "users", "TIMESTAMP", None)
+        self.insert_column("is_blocked", "users", "INTEGER", 0)
 
     def insert(self, user_id: int, tg_username: str, group_id: int, sec_group_id: int):
         """
@@ -349,11 +436,16 @@ class DB:
     def get_user_dataclass(self, user_id: int):
         from utils.dataclasses_ import User
         if self.is_exists(user_id):
-            r = self.cursor.execute("SELECT id, user_id, tg_username, group_id, sec_group_id, missed_hours, show_missed_hours_mode, smena FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            r = self.cursor.execute(
+                "SELECT id, user_id, tg_username, group_id, rasp_data, mng_time, mng_send_state, "
+                "sec_group_id, msg_max_length, format_rasp, missed_hours, show_missed_hours_mode, smena "
+                "FROM users WHERE user_id = ?", 
+                (user_id,)
+            ).fetchone()
             user = User(*r)   
             return user
         else:
-            return User(None, None, None, None, None, None, None, None)
+            return User(None, None, None, None, None, None, None, None, None, None, None, None, None)
             
     def get_TGgroup_dataclass(self, id: int):
         from utils.dataclasses_ import TGgroup

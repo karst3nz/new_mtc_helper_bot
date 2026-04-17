@@ -23,6 +23,15 @@ class NotificationManager:
         """Запуск планировщика уведомлений"""
         self.logger.info("Запуск планировщика уведомлений")
         
+        # Удаляем существующие задачи, если они есть
+        job_ids = ['lesson_reminders', 'daily_schedules', 'hours_threshold', 'check_upcoming_schedules']
+        for job_id in job_ids:
+            try:
+                self.scheduler.remove_job(job_id)
+                self.logger.debug(f"Removed existing job: {job_id}")
+            except:
+                pass  # Задача не существует, это нормально
+        
         # Проверка напоминаний о парах каждые 5 минут
         self.scheduler.add_job(
             self.check_lesson_reminders,
@@ -54,12 +63,22 @@ class NotificationManager:
             id='check_upcoming_schedules'
         )
         
-        self.scheduler.start()
-        self.logger.info("Планировщик уведомлений запущен")
+        # Запускаем планировщик только если он не запущен
+        if not self.scheduler.running:
+            self.scheduler.start()
+            self.logger.info("Планировщик уведомлений запущен")
+        else:
+            self.logger.info("Планировщик уже запущен, задачи обновлены")
     
     def stop(self):
-        """Остановка планировщика"""
-        self.scheduler.shutdown()
+        """Остановка планировщика (удаление всех задач без shutdown)"""
+        # Удаляем все задачи вместо shutdown, чтобы планировщик можно было перезапустить
+        job_ids = ['lesson_reminders', 'daily_schedules', 'hours_threshold', 'check_upcoming_schedules']
+        for job_id in job_ids:
+            try:
+                self.scheduler.remove_job(job_id)
+            except:
+                pass  # Задача не существует, это нормально
         self.logger.info("Планировщик уведомлений остановлен")
     
     async def check_lesson_reminders(self):

@@ -940,6 +940,9 @@ async def check_next_schedules(days: int = 3) -> dict:
             'total_available': int, # доступно расписаний
             'total_missing': int    # отсутствует расписаний
         }
+
+    Если локального файла нет, выполняется запрос к сайту (`Rasp.get`). При первой
+    успешной загрузке дня срабатывает рассылка «новое расписание» (как в convert_htm2txt).
     """
     logger = create_logger(__name__)
     logger.info(f"[CHECK_NEXT_SCHEDULES] Начало проверки расписания на следующие {days} дней")
@@ -977,12 +980,32 @@ async def check_next_schedules(days: int = 3) -> dict:
                     'path': txt_path
                 })
             else:
-                logger.info(f"[CHECK_NEXT_SCHEDULES] Расписание отсутствует: {date_display}")
-                missing.append({
-                    'date': date_display,
-                    'date_str': date_str,
-                    'weekday': check_date.strftime('%A')
-                })
+                logger.info(
+                    f"[CHECK_NEXT_SCHEDULES] Расписание отсутствует, запрос с сайта "
+                    f"(при первой выгрузке дня — рассылка new-rasp): {date_display}"
+                )
+                try:
+                    rasp = Rasp(date_str)
+                    await rasp.get(check_diff=True)
+                except Exception as fetch_err:
+                    logger.error(
+                        f"[CHECK_NEXT_SCHEDULES] Ошибка загрузки расписания {date_display}: {fetch_err}"
+                    )
+                if os.path.exists(txt_path):
+                    logger.info(f"[CHECK_NEXT_SCHEDULES] Расписание появилось после загрузки: {date_display}")
+                    available.append({
+                        'date': date_display,
+                        'date_str': date_str,
+                        'weekday': check_date.strftime('%A'),
+                        'path': txt_path
+                    })
+                else:
+                    logger.info(f"[CHECK_NEXT_SCHEDULES] Расписание по-прежнему недоступно: {date_display}")
+                    missing.append({
+                        'date': date_display,
+                        'date_str': date_str,
+                        'weekday': check_date.strftime('%A')
+                    })
             
             checked_dates.append(date_display)
             days_checked += 1
